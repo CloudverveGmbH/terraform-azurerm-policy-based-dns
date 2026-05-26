@@ -44,10 +44,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout ${{ github.ref_name }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032 # v3.1.2
+        uses: hashicorp/setup-terraform@6231c69db2939d0201e3a32ba5d412196c077100 # v4.0.1
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
@@ -63,16 +63,52 @@ jobs:
       - name: Run Terraform tests
         run: terraform test -verbose
 
-  # ── 2. Create GitHub Release (triggers Registry webhook) ─────────────────────
+  # ── 2. Update CHANGELOG.md on main + create GitHub Release ───────────────────
+  #
+  # BRANCH PROTECTION NOTE:
+  #   This job commits CHANGELOG.md directly to main. For this to work, the
+  #   GitHub Actions bot must be allowed to bypass branch protection:
+  #   Settings → Branches → main → "Allow specified actors to bypass required
+  #   pull request reviews" → add "github-actions[bot]".
+  #   Alternatively, supply a PAT via secrets.CHANGELOG_PAT and set:
+  #     token: ${{ secrets.CHANGELOG_PAT }}
+  #   in the checkout step below.
   publish:
-    name: GitHub Release
+    name: Changelog + GitHub Release
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - name: Checkout ${{ github.ref_name }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Checkout main (not the tag) so we can push CHANGELOG.md back.
+      # The tag was just created on the HEAD of main by auto-tag.yml, so
+      # checking out main gives us the exact same tree.
+      - name: Checkout main (full history)
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
         with:
-          fetch-depth: 0 # needed for changelog generation
+          fetch-depth: 0
+          ref: main
+
+      - name: Generate CHANGELOG.md with git-cliff
+        id: cliff
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        with:
+          config: cliff.toml
+          args: --verbose --tag ${{ github.ref_name }}
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit CHANGELOG.md to main
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "No CHANGELOG changes to commit."
+          else
+            git commit -m "chore: update CHANGELOG.md for ${{ github.ref_name }}"
+            git push origin main
+          fi
 
       - name: Extract vendored policy version
         id: policy_version
@@ -82,14 +118,14 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.1.0
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
-          generate_release_notes: true # auto-generates changelog from PRs since last tag
+          # body_path writes the cliff-generated release section as the release body.
+          # This is the content between the current and previous tag.
           body: |
-            ## Terraform Module: `azurerm/private-dns-policy`
+            ${{ steps.cliff.outputs.content }}
 
-            Policy-driven Private Endpoint DNS registration following the
-            [Microsoft CAF Private Link at scale](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/azure-best-practices/private-link-and-dns-integration-at-scale) pattern.
+            ---
 
             ### Vendored ALZ Policy
             | Property | Value |
@@ -122,6 +158,3 @@ jobs:
             - Terraform `>= 1.9`
             - AzureRM provider `>= 3.116`
             - Two `azurerm` provider aliases (default + `azurerm.connectivity`)
-
-            ---
-            > 📋 See [CHANGELOG](#) below for all changes in this release (auto-generated from merged PRs).
