@@ -237,6 +237,12 @@ Behaviour:
 - The provided zone ID is used directly for policy assignments and RBAC.
 - If multiple active service keys share the same `zone_name`, they must all reference the same `existing_zone_id` (otherwise a module precondition will fail).
 
+## AI Disclosure
+
+- Parts of this README were drafted with AI assistance to improve clarity and speed up documentation work.
+- All technical content should be reviewed and validated by a human before use in production or critical environments.
+- This documentation is provided as-is, without warranty or guarantee of completeness, accuracy, or fitness for a specific purpose.
+
 ---
 
 ---
@@ -479,3 +485,9 @@ Verhalten:
 - Bei gesetztem `existing_zone_id` wird die Zone **nicht** erstellt und **nicht** per Data Source in `dns_resource_group_name` gesucht.
 - Die angegebene Zone-ID wird direkt für die Policy-Assignments/RBAC verwendet.
 - Wenn mehrere aktivierte Service-Keys auf dieselbe `zone_name` zeigen, müssen sie auf dieselbe `existing_zone_id` zeigen (sonst schlägt ein Modul-Check fehl).
+
+## AI-Hinweis
+
+- Teile dieser README wurden mit KI-Unterstützung erstellt, um die Dokumentation schneller und verständlicher zu machen.
+- Alle technischen Inhalte sollten vor produktivem oder kritischem Einsatz von einer Person geprüft und bestätigt werden.
+- Diese Dokumentation wird ohne Gewähr bereitgestellt; Vollständigkeit, Richtigkeit und Eignung für einen bestimmten Zweck sind nicht garantiert.

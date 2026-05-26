@@ -1,0 +1,12 @@
+# Global ownership – any unmatched file requires review from the platform team
+*                         @CloudverveGmbH/CloudverveDevs
+
+# Workflow changes always require maintainer review (pipeline hijacking protection)
+.github/workflows/        @CloudverveGmbH/CloudverveDevs
+
+# Vendored policy JSON – hash & content must be reviewed before merging
+policy_definitions/       @CloudverveGmbH/CloudverveDevs
+
+# Core module files
+*.tf                      @CloudverveGmbH/CloudverveDevs
+*.tftest.hcl              @CloudverveGmbH/CloudverveDevs
