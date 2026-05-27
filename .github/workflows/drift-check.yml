@@ -32,25 +32,63 @@ jobs:
             policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json)
 
           MAIN_URL="https://raw.githubusercontent.com/Azure/Enterprise-Scale/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json"
-          MAIN_VERSION=$(curl -fsSL "$MAIN_URL" | jq -r '.properties.metadata.version')
+          MAIN_TMP=$(mktemp)
+          curl -fsSL "$MAIN_URL" -o "$MAIN_TMP"
+          MAIN_VERSION=$(jq -r '.properties.metadata.version' "$MAIN_TMP")
+
+          VENDORED_HASH=$(jq -S . policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json | sha256sum | awk '{print $1}')
+          MAIN_HASH=$(jq -S . "$MAIN_TMP" | sha256sum | awk '{print $1}')
 
           echo "vendored_version=${VENDORED_VERSION}" >> "$GITHUB_OUTPUT"
           echo "main_version=${MAIN_VERSION}"         >> "$GITHUB_OUTPUT"
+          echo "vendored_hash=${VENDORED_HASH}"       >> "$GITHUB_OUTPUT"
+          echo "main_hash=${MAIN_HASH}"               >> "$GITHUB_OUTPUT"
 
           # Simple semver-style comparison using sort -V
           NEWER=$(printf '%s\n%s\n' "$VENDORED_VERSION" "$MAIN_VERSION" \
             | sort -V | tail -n1)
 
+          HAS_VERSION_DRIFT=false
+          HAS_CONTENT_DRIFT=false
+
           if [ "$NEWER" != "$VENDORED_VERSION" ]; then
+            HAS_VERSION_DRIFT=true
+          fi
+
+          if [ "$VENDORED_HASH" != "$MAIN_HASH" ]; then
+            HAS_CONTENT_DRIFT=true
+          fi
+
+          if [ "$HAS_VERSION_DRIFT" = true ] || [ "$HAS_CONTENT_DRIFT" = true ]; then
             echo "has_drift=true"  >> "$GITHUB_OUTPUT"
           else
             echo "has_drift=false" >> "$GITHUB_OUTPUT"
           fi
 
+          echo "has_version_drift=${HAS_VERSION_DRIFT}" >> "$GITHUB_OUTPUT"
+          echo "has_content_drift=${HAS_CONTENT_DRIFT}" >> "$GITHUB_OUTPUT"
+
+          if [ "$HAS_VERSION_DRIFT" = true ] && [ "$HAS_CONTENT_DRIFT" = true ]; then
+            echo "drift_reason=version-and-content" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_VERSION_DRIFT" = true ]; then
+            echo "drift_reason=version" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_CONTENT_DRIFT" = true ]; then
+            echo "drift_reason=content" >> "$GITHUB_OUTPUT"
+          else
+            echo "drift_reason=none" >> "$GITHUB_OUTPUT"
+          fi
+
+          rm -f "$MAIN_TMP"
+
       - name: Log result
         run: |
           echo "Vendored version : ${{ steps.check.outputs.vendored_version }}"
           echo "Upstream version : ${{ steps.check.outputs.main_version }}"
+          echo "Vendored hash    : ${{ steps.check.outputs.vendored_hash }}"
+          echo "Upstream hash    : ${{ steps.check.outputs.main_hash }}"
+          echo "Version drift    : ${{ steps.check.outputs.has_version_drift }}"
+          echo "Content drift    : ${{ steps.check.outputs.has_content_drift }}"
+          echo "Reason           : ${{ steps.check.outputs.drift_reason }}"
           echo "Drift detected   : ${{ steps.check.outputs.has_drift }}"
 
       # Only open an issue when drift is detected and no open issue already exists
@@ -59,7 +97,10 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const title = `ALZ Policy drift detected: upstream ${context.payload ? '' : ''}v${{ steps.check.outputs.main_version }} > vendored v${{ steps.check.outputs.vendored_version }}`;
+            const reason = '${{ steps.check.outputs.drift_reason }}';
+            const title = reason === 'content'
+              ? `ALZ Policy drift detected: content differs (v${{ steps.check.outputs.main_version }})`
+              : `ALZ Policy drift detected: upstream v${{ steps.check.outputs.main_version }} > vendored v${{ steps.check.outputs.vendored_version }}`;
 
             // Check if an issue with the same title is already open
             const issues = await github.rest.issues.listForRepo({
@@ -75,6 +116,10 @@ jobs:
               return;
             }
 
+            const summary = reason === 'content'
+              ? `The upstream [Azure/Enterprise-Scale](https://github.com/Azure/Enterprise-Scale) repository has different canonical JSON content for \`Deploy-Private-DNS-Generic.json\` on \`main\` (after normalization).`
+              : `The upstream [Azure/Enterprise-Scale](https://github.com/Azure/Enterprise-Scale) repository has a newer version of \`Deploy-Private-DNS-Generic.json\` on \`main\`.`;
+
             const body = [
               `## ALZ Policy Drift Detected`,
               ``,
@@ -83,8 +128,14 @@ jobs:
               `| **Vendored** (current) | \`${{ steps.check.outputs.vendored_version }}\` |`,
               `| **Upstream main** | \`${{ steps.check.outputs.main_version }}\` |`,
               ``,
-              `The upstream [Azure/Enterprise-Scale](https://github.com/Azure/Enterprise-Scale) ` +
-              `repository has a newer version of \`Deploy-Private-DNS-Generic.json\` on \`main\`.`,
+              `| | SHA256 (canonical JSON) |`,
+              `|---|---|`,
+              `| **Vendored** (current) | \`${{ steps.check.outputs.vendored_hash }}\` |`,
+              `| **Upstream main** | \`${{ steps.check.outputs.main_hash }}\` |`,
+              ``,
+              `Detected reason: **${{ steps.check.outputs.drift_reason }}**`,
+              ``,
+              summary,
               ``,
               `### Action required`,
               `1. Review the upstream diff: [Deploy-Private-DNS-Generic.json](https://github.com/Azure/Enterprise-Scale/commits/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json)`,

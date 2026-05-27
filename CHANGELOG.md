@@ -9,12 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- CLIFF:START -->
 
+## [Unreleased]
+
+### Changed
+- ALZ Policy is now included in this repository.
+- Version check of policy template is done via github actions
+
 ## [0.0.1] — 2026-05-26
 
 Policy-driven private DNS registration for Azure Private Endpoints, following the
 [Microsoft CAF: Private Link and DNS integration at scale](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/azure-best-practices/private-link-and-dns-integration-at-scale) pattern.
 
-### 🚀 Features
+### Features
 
 - Most Azure service keys across 10 categories (Storage, Databases, Analytics, Compute, Security, Hybrid, IoT, Media, Management, Web) based on [Azure Private Endpoint private DNS zone values](https://learn.microsoft.com/en-us/azure/private-link/private-endpoint-dns)
 - `DeployIfNotExists` policy assignments at Resource Group, Subscription, or Management Group scope
@@ -25,7 +31,7 @@ Policy-driven private DNS registration for Azure Private Endpoints, following th
 - VNet links for managed DNS zones
 - Terraform native test suite (14 runs across 2 test files)
 
-### 🔒 Policy
+### Policy
 
 - Vendored ALZ policy tag: `2026-04-29`
 - SHA256: `a2e3805c1129b5d540f38fbfe9f3c0608926c64526023a22fdaac7b81b22287a`
