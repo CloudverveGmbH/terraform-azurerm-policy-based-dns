@@ -1,72 +1,11 @@
-data "http" "alz_latest_main_policy" {
-  count = var.enable_latest_version_check ? 1 : 0
-
-  url = "https://raw.githubusercontent.com/Azure/Enterprise-Scale/refs/heads/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json"
-
-  request_headers = {
-    Accept = "application/json"
-  }
-}
-
 data "azurerm_client_config" "current" {}
 
 locals {
   policy_json_raw                = file("${path.module}/${var.policy_json_local_path}")
-  policy_json_sha256             = lower(sha256(local.policy_json_raw))
   alz_deploy_private_dns_generic = jsondecode(local.policy_json_raw)
   alz_policy_properties          = local.alz_deploy_private_dns_generic.properties
   alz_policy_rule_json           = replace(jsonencode(local.alz_policy_properties.policyRule), "[[", "[")
   alz_policy_version             = try(local.alz_policy_properties.metadata.version, "unknown")
-  latest_main_policy_version     = var.enable_latest_version_check ? try(jsondecode(data.http.alz_latest_main_policy[0].response_body).properties.metadata.version, null) : null
-
-  current_policy_version_parts = slice(
-    concat(regexall("[0-9]+", tostring(local.alz_policy_version)), ["0", "0", "0", "0"]),
-    0,
-    4
-  )
-
-  latest_main_policy_version_parts = slice(
-    concat(regexall("[0-9]+", tostring(local.latest_main_policy_version)), ["0", "0", "0", "0"]),
-    0,
-    4
-  )
-
-  current_policy_version_numbers = [
-    tonumber(local.current_policy_version_parts[0]),
-    tonumber(local.current_policy_version_parts[1]),
-    tonumber(local.current_policy_version_parts[2]),
-    tonumber(local.current_policy_version_parts[3])
-  ]
-
-  latest_main_policy_version_numbers = [
-    tonumber(local.latest_main_policy_version_parts[0]),
-    tonumber(local.latest_main_policy_version_parts[1]),
-    tonumber(local.latest_main_policy_version_parts[2]),
-    tonumber(local.latest_main_policy_version_parts[3])
-  ]
-
-  has_later_version = (
-    var.enable_latest_version_check &&
-    local.latest_main_policy_version != null &&
-    (
-      local.latest_main_policy_version_numbers[0] > local.current_policy_version_numbers[0] ||
-      (
-        local.latest_main_policy_version_numbers[0] == local.current_policy_version_numbers[0] &&
-        local.latest_main_policy_version_numbers[1] > local.current_policy_version_numbers[1]
-      ) ||
-      (
-        local.latest_main_policy_version_numbers[0] == local.current_policy_version_numbers[0] &&
-        local.latest_main_policy_version_numbers[1] == local.current_policy_version_numbers[1] &&
-        local.latest_main_policy_version_numbers[2] > local.current_policy_version_numbers[2]
-      ) ||
-      (
-        local.latest_main_policy_version_numbers[0] == local.current_policy_version_numbers[0] &&
-        local.latest_main_policy_version_numbers[1] == local.current_policy_version_numbers[1] &&
-        local.latest_main_policy_version_numbers[2] == local.current_policy_version_numbers[2] &&
-        local.latest_main_policy_version_numbers[3] > local.current_policy_version_numbers[3]
-      )
-    )
-  )
 
   normalized_policy_definition_management_group_id = (
     var.policy_definition_at_management_group == null ? null : (
@@ -145,11 +84,6 @@ resource "azurerm_user_assigned_identity" "policy_assignment" {
   resource_group_name = var.dns_resource_group_name
 
   lifecycle {
-    precondition {
-      condition     = local.policy_json_sha256 == lower(var.expected_policy_json_sha256)
-      error_message = "Vendored policy JSON hash mismatch. Expected ${lower(var.expected_policy_json_sha256)}, got ${local.policy_json_sha256}."
-    }
-
     precondition {
       condition     = length(local.overlapping_subscription_scopes) == 0
       error_message = "Conflicting assignment scopes: at least one subscription has both subscription-level and resource-group-level assignments. Overlaps: ${join(", ", tolist(local.overlapping_subscription_scopes))}."

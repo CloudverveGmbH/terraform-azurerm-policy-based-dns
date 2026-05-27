@@ -12,21 +12,6 @@ output "imported_policy_version" {
   value       = local.alz_policy_version
 }
 
-output "policy_json_sha256" {
-  description = "SHA256 of the vendored Deploy-Private-DNS-Generic policy JSON used by this module."
-  value       = local.policy_json_sha256
-}
-
-output "latest_main_policy_version" {
-  description = "Version from properties.metadata.version in the Deploy-Private-DNS-Generic policy on Enterprise-Scale main."
-  value       = local.latest_main_policy_version
-}
-
-output "has_later_version" {
-  description = "True when latest_main_policy_version is newer than imported_policy_version (numeric segment comparison)."
-  value       = local.has_later_version
-}
-
 output "zone_ids" {
   description = "Resolved private DNS zone IDs keyed by zone_name. Useful for creating additional VNet links or referencing zones outside this module."
   value       = local.zone_ids
