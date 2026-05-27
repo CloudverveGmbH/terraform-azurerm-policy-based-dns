@@ -1,4 +1,4 @@
-# Auto Tag — creates and pushes a new semver tag on every push to main.
+# Auto Tag — creates and pushes a new semver tag when a PR is merged into main.
 #
 # VERSION BUMP RULES (checked in order):
 #   1. Commit message / PR title contains [major]  → bump MAJOR, reset minor + patch to 0
@@ -16,14 +16,16 @@
 #   "Fix typo in README"                            → v1.0.1  (default)
 #
 # SECURITY:
-#   The workflow runs only on commits that landed on main (post-merge).
+#   The workflow runs only for merged PRs into main (post-merge).
 #   It has `contents: write` to push the tag and nothing else.
 #   No secrets beyond GITHUB_TOKEN are required.
 
 name: Auto Tag
 
 on:
-  push:
+  pull_request:
+    types:
+      - closed
     branches:
       - main
     paths:
@@ -50,10 +52,15 @@ on:
 permissions:
   contents: write # needed to push the new tag
 
+concurrency:
+  group: auto-tag-main
+  cancel-in-progress: false
+
 jobs:
   bump-tag:
     name: Bump and push semver tag
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     steps:
       - name: Checkout (with full tag history)
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
@@ -91,18 +98,21 @@ jobs:
           fi
 
           # ── Determine bump level ──────────────────────────────────────────
-          # Check commit message for [major] / [minor] markers.
-          # For push events, inspect the HEAD commit message.
+          # Check PR title/body (or commit message fallback) for [major]/[minor].
           # For workflow_dispatch, use the dropdown input.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BUMP="${{ github.event.inputs.bump }}"
           else
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            PR_BODY="${{ github.event.pull_request.body }}"
             COMMIT_MSG=$(git log -1 --pretty=%B)
-            echo "Commit message: ${COMMIT_MSG}"
+            TEXT="${PR_TITLE}\n${PR_BODY}\n${COMMIT_MSG}"
 
-            if echo "$COMMIT_MSG" | grep -qi '\[major\]'; then
+            echo "PR title: ${PR_TITLE}"
+
+            if echo "$TEXT" | grep -qi '\[major\]'; then
               BUMP="major"
-            elif echo "$COMMIT_MSG" | grep -qi '\[minor\]'; then
+            elif echo "$TEXT" | grep -qi '\[minor\]'; then
               BUMP="minor"
             else
               BUMP="patch"
@@ -146,4 +156,4 @@ jobs:
         run: |
           echo "### 🏷️ Tagged \`${{ steps.version.outputs.next_version }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "The \`release.yml\` workflow will now pick this up, run tests, and publish the GitHub Release." >> "$GITHUB_STEP_SUMMARY"
+          echo "The \`release.yml\` workflow will now run (workflow_run), execute tests, update CHANGELOG.md, and publish the GitHub Release." >> "$GITHUB_STEP_SUMMARY"

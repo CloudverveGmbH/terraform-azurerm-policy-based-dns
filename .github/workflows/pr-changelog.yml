@@ -1,0 +1,66 @@
+name: PR Changelog
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+      - ready_for_review
+    branches:
+      - main
+    paths:
+      - "**.tf"
+      - "**.tftest.hcl"
+      - "policy_definitions/**"
+      - ".github/cliff.toml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  update-changelog:
+    name: Update CHANGELOG.md (Unreleased)
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false && github.actor != 'github-actions[bot]'
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Generate CHANGELOG.md with git-cliff
+        id: cliff
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        with:
+          config: .github/cliff.toml
+          args: --verbose --unreleased
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit CHANGELOG.md to PR branch
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+
+          if git diff --staged --quiet; then
+            echo "No CHANGELOG changes to commit."
+          else
+            git commit -m "chore: update CHANGELOG for PR #${{ github.event.pull_request.number }}"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
+
+      - name: PR summary
+        run: |
+          echo "### 📝 CHANGELOG updated" >> "$GITHUB_STEP_SUMMARY"
+          echo "Updated \\`CHANGELOG.md\\` using git-cliff (Unreleased section)." >> "$GITHUB_STEP_SUMMARY"
