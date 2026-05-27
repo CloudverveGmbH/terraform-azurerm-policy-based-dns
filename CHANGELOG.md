@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - ALZ Policy is now included in this repository.
 - Version check of policy template is done via github actions
+- CI Workflow now uses wrapper module to execute `terraform validate`
 
 ## [0.0.1] — 2026-05-26
 
