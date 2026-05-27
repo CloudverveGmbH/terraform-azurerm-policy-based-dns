@@ -44,18 +44,6 @@ variable "policy_json_local_path" {
   default     = "policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json"
 }
 
-variable "expected_policy_json_sha256" {
-  type        = string
-  description = "Expected SHA256 of the vendored policy JSON. Apply fails if file content differs."
-  default     = "a2e3805c1129b5d540f38fbfe9f3c0608926c64526023a22fdaac7b81b22287a"
-}
-
-variable "enable_latest_version_check" {
-  type        = bool
-  description = "When true, fetches Deploy-Private-DNS-Generic from Enterprise-Scale main and compares metadata.version against imported_policy_version."
-  default     = true
-}
-
 variable "policy_effect" {
   type        = string
   description = "Policy effect value."

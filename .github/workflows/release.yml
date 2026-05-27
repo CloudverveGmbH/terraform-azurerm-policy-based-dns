@@ -52,13 +52,13 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform init (no backend)
-        run: terraform init -backend=false
+        run: terraform -chdir=examples/ci-validate init -backend=false
 
       - name: Validate format
         run: terraform fmt -check -recursive -diff
 
       - name: Terraform validate
-        run: terraform validate
+        run: terraform -chdir=examples/ci-validate validate
 
       - name: Run Terraform tests
         run: terraform test -verbose

@@ -16,7 +16,7 @@ A **reusable Terraform module** that implements policy-driven private DNS regist
 **The problem being solved:** When a Private Endpoint is created, a DNS A record must be registered so that workloads resolve the private IP. This module automates that via `DeployIfNotExists` (DINE) Azure Policy — no manual DNS management required.
 
 **How the DINE policy works:**
-1. A custom policy definition is imported from the ALZ repo via HTTP (`data.http` + `jsondecode`)
+1. A pinned custom policy definition snapshot from the ALZ repo is loaded from the module package via `jsondecode`
 2. The policy watches for Private Endpoints matching a given `resourceType` and `groupId`
 3. On match, it deploys a `privateDnsZoneGroup` onto the endpoint
 4. Azure writes/cleans up the A record automatically in the linked Private DNS Zone
@@ -29,7 +29,7 @@ A **reusable Terraform module** that implements policy-driven private DNS regist
 |---|---|
 | `catalog.tf` | Service catalog (group_id, resource_type, zone_name, category) + selection logic → `effective_subresource_zone_map` |
 | `network.tf` | DNS zone deduplication: create (`azurerm_private_dns_zone`) or look up (`data.azurerm_private_dns_zone`) per zone_name |
-| `policies.tf` | Vendored policy JSON import (+ optional latest-main check), Policy Definition, Assignments (RG/Sub/MG), RBAC |
+| `policies.tf` | Vendored policy JSON import, Policy Definition, Assignments (RG/Sub/MG), RBAC |
 | `variables.tf` | All input variables |
 | `outputs.tf` | Key outputs: `zone_ids`, `effective_subresource_zone_map`, `assignment_principal_ids`, scope outputs |
 | `main.tf` | Provider alias declarations (`azurerm`, `azurerm.connectivity`) |

@@ -11,7 +11,7 @@ A reusable Terraform module that automates private DNS registration for Azure Pr
 **Configuration in three steps:**
 
 1. **Activate categories/services** — `enabled_categories` and/or `enabled_services` control which services are watched. The `bool` value means `create_zone`: `true` = Terraform creates the DNS zone, `false` = zone already exists and is read via data source.
-2. **Set scopes** — `policy_definition_at_management_group` (optional, definition scope only) and `policy_assignment_scope_ids` (generic list for RG/Sub/MG assignments).
+2. **Set scopes** — `policy_definition_at_management_group` (optional, definition scope only) and `policy_assignment_scope_ids` (friendly-name map for RG/Sub/MG assignments).
 3. **Override optionally** — `service_overrides` allows per-service-key customisation of `group_id`, `resource_type`, `zone_name`, or `existing_zone_id` (for zones in different resource groups).
 
 The module handles deduplication of DNS zones (multiple services, one zone) and RBAC assignments (multiple assignments, one scope) internally. A single User-Assigned Managed Identity is shared across all policy assignments.
@@ -24,7 +24,7 @@ This module implements policy-based private DNS integration for Private Endpoint
 
 - `catalog.tf`: DNS lookup table + category/service mapping logic.
 - `network.tf`: Resolve or create DNS zones (depending on `create_zone`).
-- `policies.tf`: ALZ policy JSON import via `http` + `jsondecode`, policy definition, assignments and RBAC.
+- `policies.tf`: vendored ALZ policy JSON import via `jsondecode`, policy definition, assignments and RBAC.
 - `main.tf`: Provider declarations for the module.
 
 ## Managed Identity Model
@@ -106,27 +106,6 @@ Result:
 | `Management` | Management and Governance, Integration | azuremonitor, backup, siterecovery, grafana, purview, eventgrid, apim, healthcare, ... |
 | `Web` | Web | webapp, webapp_scm, staticwebapp, signalr, webpubsub, searchservice, relay, maps |
 
-## ALZ Policy Source (pinned)
-
-The policy definition is committed as a file in the repository and read locally:
-
-- Local file: `policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json`
-- Integrity protection: `expected_policy_json_sha256` is validated on apply via precondition
-
-The original source of the snapshot is the release tag `2026-04-29` (not `main`):
-
-- Repo URL: `https://github.com/Azure/Enterprise-Scale/tree/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json`
-- Raw URL: `https://raw.githubusercontent.com/Azure/Enterprise-Scale/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json`
-
-The imported version is available in `imported_policy_version`, the hash in `policy_json_sha256`.
-
-Optionally, the module checks the current policy on `main` via `https://raw.githubusercontent.com/Azure/Enterprise-Scale/refs/heads/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json` (`enable_latest_version_check = true`) and exposes the following outputs:
-
-- `latest_main_policy_version` (from `properties.metadata.version`)
-- `has_later_version` (`true` when `latest_main_policy_version` is newer than `imported_policy_version`)
-
-When `enable_latest_version_check = false`, no HTTP call to `main` is made.
-
 ## Shared DNS Zones (Deduplication)
 
 Multiple services can reference the same `zone_name`. Example: `blob`, `managed_disks`, `elastic_san` and `azuremonitor_blob` all use `privatelink.blob.core.windows.net`.
@@ -151,7 +130,7 @@ Result: `privatelink.blob.core.windows.net` is created once; both services use t
 Policy definition scope and assignment scopes are deliberately decoupled (separation of concerns):
 
 - `policy_definition_at_management_group` (`string|null`): optional MG scope for the policy definition. Accepts a full MG resource ID or a short name.
-- `policy_assignment_scope_ids` (`set(string)`): generic scope list for assignments. Supports RG, subscription, and MG IDs; scope type is detected automatically from the ID format.
+- `policy_assignment_scope_ids` (`map(string)`): generic assignment scopes keyed by friendly name. Supports RG, subscription, and MG IDs; scope type is detected automatically from the ID format.
 
 Important:
 
@@ -162,11 +141,11 @@ Important:
 Example (RG + explicit subscriptions):
 
 ```hcl
-policy_assignment_scope_ids = [
-  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu",
-  "/subscriptions/11111111-1111-1111-1111-111111111111",
-  "/subscriptions/22222222-2222-2222-2222-222222222222"
-]
+policy_assignment_scope_ids = {
+  rg_app_prod_weu = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
+  sub_one         = "/subscriptions/11111111-1111-1111-1111-111111111111"
+  sub_two         = "/subscriptions/22222222-2222-2222-2222-222222222222"
+}
 
 policy_definition_at_management_group = null
 ```
@@ -176,11 +155,11 @@ Example (definition on Root MG, assignments on child MGs):
 ```hcl
 policy_definition_at_management_group = "mg-root"
 
-policy_assignment_scope_ids = [
-  "/providers/Microsoft.Management/managementGroups/mg-platform-prod",
-  "/providers/Microsoft.Management/managementGroups/mg-connectivity-prod",
-  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
-]
+policy_assignment_scope_ids = {
+  mg_platform_prod     = "/providers/Microsoft.Management/managementGroups/mg-platform-prod"
+  mg_connectivity_prod = "/providers/Microsoft.Management/managementGroups/mg-connectivity-prod"
+  rg_app_prod_weu      = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
+}
 ```
 
 Example (definition on MG, but only RG and subscription assignments):
@@ -188,31 +167,35 @@ Example (definition on MG, but only RG and subscription assignments):
 ```hcl
 policy_definition_at_management_group = "mg-platform-prod"
 
-policy_assignment_scope_ids = [
-  "/subscriptions/11111111-1111-1111-1111-111111111111",
-  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
-]
+policy_assignment_scope_ids = {
+  sub_one         = "/subscriptions/11111111-1111-1111-1111-111111111111"
+  rg_app_prod_weu = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
+}
 ```
 
 Not allowed (blocked by precondition):
 
 ```hcl
 # MG assignment scope without policy_definition_at_management_group
-policy_assignment_scope_ids = [
-  "/providers/Microsoft.Management/managementGroups/mg-platform-prod"
-]
+policy_assignment_scope_ids = {
+  mg_platform_prod = "/providers/Microsoft.Management/managementGroups/mg-platform-prod"
+}
 # policy_definition_at_management_group = null  ← missing
 
 # Overlapping subscription + RG from the same subscription
-policy_assignment_scope_ids = [
-  "/subscriptions/11111111-1111-1111-1111-111111111111",
-  "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-app-prod-weu"
-]
+policy_assignment_scope_ids = {
+  sub_one         = "/subscriptions/11111111-1111-1111-1111-111111111111"
+  rg_app_prod_weu = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-app-prod-weu"
+}
 ```
 
 ## Remediation
 
 `DeployIfNotExists` acts primarily on new or re-evaluated resources. Existing Private Endpoints are not automatically remediated immediately; Azure Policy Remediation Tasks or a later compliance re-evaluation are required for those.
+
+## ALZ Policy Source (pinned)
+
+This module uses the ALZ [`Deploy-Private-DNS-Generic`](https://github.com/Azure/Enterprise-Scale/blob/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json) policy and bundles a pinned JSON snapshot with the module package.
 
 ## Notes
 
@@ -260,7 +243,7 @@ Dieses Modul automatisiert die DNS-Registrierung für Azure Private Endpoints mi
 **Konfiguration in drei Schritten:**
 
 1. **Kategorien/Services aktivieren** — `enabled_categories` und/oder `enabled_services` steuern, welche Dienste überwacht werden. Der `bool`-Wert bedeutet `create_zone`: `true` = Terraform erstellt die DNS-Zone, `false` = Zone existiert bereits und wird per Data Source gelesen.
-2. **Scopes festlegen** — `policy_definition_at_management_group` (optional, nur für Definition-Scope) und `policy_assignment_scope_ids` (generische Liste für RG/Sub/MG-Assignments).
+2. **Scopes festlegen** — `policy_definition_at_management_group` (optional, nur für Definition-Scope) und `policy_assignment_scope_ids` (friendly-name Map für RG/Sub/MG-Assignments).
 3. **Optional überschreiben** — `service_overrides` erlaubt pro Service-Key Anpassungen von `group_id`, `resource_type`, `zone_name` oder `existing_zone_id` (für Zonen in fremden Resource Groups).
 
 Das Modul verwaltet intern die Deduplizierung von DNS-Zonen (mehrere Services, eine Zone) und von RBAC-Zuweisungen (mehrere Assignments, ein Scope). Eine einzige User-Assigned Managed Identity wird für alle Policy Assignments verwendet.
@@ -273,7 +256,7 @@ Dieses Modul kapselt die policy-basierte Private-DNS-Integration für Private En
 
 - `catalog.tf`: DNS-Lookup-Tabelle + Kategorie/Service-Mappinglogik.
 - `network.tf`: DNS-Zonen auflösen oder erstellen (je nach `create_zone`).
-- `policies.tf`: ALZ Policy JSON Import per `http` + `jsondecode`, Policy Definition, Assignments und RBAC.
+- `policies.tf`: vendored ALZ Policy JSON Import per `jsondecode`, Policy Definition, Assignments und RBAC.
 - `main.tf`: Provider-Definitionen für das Modul.
 
 ## Managed Identity Modell
@@ -355,27 +338,6 @@ Ergebnis:
 | `Management` | Management and Governance, Integration | azuremonitor, backup, siterecovery, grafana, purview, eventgrid, apim, healthcare, ... |
 | `Web` | Web | webapp, webapp_scm, staticwebapp, signalr, webpubsub, searchservice, relay, maps |
 
-## ALZ Policy Quelle (gepinned)
-
-Die Policy-Definition ist explizit als Datei im Repository abgelegt und wird lokal eingelesen:
-
-- Lokale Datei: `policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json`
-- Integritätsschutz: `expected_policy_json_sha256` wird beim Apply per Precondition geprüft
-
-Die Originalquelle des Snapshots bleibt der Release-Tag `2026-04-29` (nicht `main`):
-
-- Repo URL: `https://github.com/Azure/Enterprise-Scale/tree/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json`
-- Raw URL: `https://raw.githubusercontent.com/Azure/Enterprise-Scale/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json`
-
-Die importierte Version steht in `imported_policy_version`, der Hash in `policy_json_sha256`.
-
-Optional prüft das Modul die aktuelle Policy auf `main` über `https://raw.githubusercontent.com/Azure/Enterprise-Scale/refs/heads/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json` (`enable_latest_version_check = true`) und stellt folgende Outputs bereit:
-
-- `latest_main_policy_version` (aus `properties.metadata.version`)
-- `has_later_version` (`true`, wenn `latest_main_policy_version` neuer ist als `imported_policy_version`)
-
-Wenn `enable_latest_version_check = false` gesetzt ist, wird kein HTTP-Call auf `main` ausgeführt.
-
 ## Geteilte DNS-Zonen (Deduplication)
 
 Mehrere Services können dieselbe `zone_name` referenzieren. Beispiel: `blob`, `managed_disks`, `elastic_san` und `azuremonitor_blob` nutzen alle `privatelink.blob.core.windows.net`.
@@ -400,7 +362,7 @@ Ergebnis: `privatelink.blob.core.windows.net` wird einmal erstellt, beide Servic
 Definition und Assignments sind bewusst entkoppelt (Separation of Concerns):
 
 - `policy_definition_at_management_group` (`string|null`): optionaler MG-Scope für die Policy Definition.
-- `policy_assignment_scope_ids` (`set(string)`): generische Scope-Liste für Assignments. Unterstützt RG-, Subscription- und MG-IDs; der Scope-Typ wird automatisch erkannt.
+- `policy_assignment_scope_ids` (`map(string)`): generische Assignment-Scopes mit Friendly Name als Key. Unterstützt RG-, Subscription- und MG-IDs; der Scope-Typ wird automatisch erkannt.
 
 Wichtig:
 
@@ -411,11 +373,11 @@ Wichtig:
 Beispiel (RG + explizite Subscriptions):
 
 ```hcl
-policy_assignment_scope_ids = [
-  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu",
-  "/subscriptions/11111111-1111-1111-1111-111111111111",
-  "/subscriptions/22222222-2222-2222-2222-222222222222"
-]
+policy_assignment_scope_ids = {
+  rg_app_prod_weu = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
+  sub_one         = "/subscriptions/11111111-1111-1111-1111-111111111111"
+  sub_two         = "/subscriptions/22222222-2222-2222-2222-222222222222"
+}
 
 policy_definition_at_management_group = null
 ```
@@ -425,11 +387,11 @@ Beispiel (Definition auf Root-MG, Assignments auf Child-MGs):
 ```hcl
 policy_definition_at_management_group = "mg-root"
 
-policy_assignment_scope_ids = [
-  "/providers/Microsoft.Management/managementGroups/mg-platform-prod",
-  "/providers/Microsoft.Management/managementGroups/mg-connectivity-prod",
-  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
-]
+policy_assignment_scope_ids = {
+  mg_platform_prod     = "/providers/Microsoft.Management/managementGroups/mg-platform-prod"
+  mg_connectivity_prod = "/providers/Microsoft.Management/managementGroups/mg-connectivity-prod"
+  rg_app_prod_weu      = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
+}
 ```
 
 Beispiel (Definition auf MG, aber nur RG- und Subscription-Assignments):
@@ -437,31 +399,35 @@ Beispiel (Definition auf MG, aber nur RG- und Subscription-Assignments):
 ```hcl
 policy_definition_at_management_group = "mg-platform-prod"
 
-policy_assignment_scope_ids = [
-  "/subscriptions/11111111-1111-1111-1111-111111111111",
-  "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
-]
+policy_assignment_scope_ids = {
+  sub_one         = "/subscriptions/11111111-1111-1111-1111-111111111111"
+  rg_app_prod_weu = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-app-prod-weu"
+}
 ```
 
 Nicht erlaubt (wird geblockt):
 
 ```hcl
 # MG-Assignment-Scope ohne policy_definition_at_management_group
-policy_assignment_scope_ids = [
-  "/providers/Microsoft.Management/managementGroups/mg-platform-prod"
-]
+policy_assignment_scope_ids = {
+  mg_platform_prod = "/providers/Microsoft.Management/managementGroups/mg-platform-prod"
+}
 # policy_definition_at_management_group = null  ← fehlt
 
 # Überlappende Subscription + RG derselben Subscription
-policy_assignment_scope_ids = [
-  "/subscriptions/11111111-1111-1111-1111-111111111111",
-  "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-app-prod-weu"
-]
+policy_assignment_scope_ids = {
+  sub_one         = "/subscriptions/11111111-1111-1111-1111-111111111111"
+  rg_app_prod_weu = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-app-prod-weu"
+}
 ```
 
 ## Remediation-Hinweis
 
 `DeployIfNotExists` wirkt primär auf neue bzw. neu evaluierte Ressourcen. Bereits bestehende Private Endpoints werden nicht automatisch sofort remediated; dafür sind Azure Policy Remediation Tasks bzw. eine spätere Compliance-Neuauswertung erforderlich.
+
+## ALZ Policy Quelle (gepinned)
+
+Dieses Modul nutzt die ALZ-Policy [`Deploy-Private-DNS-Generic`](https://github.com/Azure/Enterprise-Scale/blob/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json) und bündelt einen gepinnten JSON-Snapshot im Modulpaket.
 
 ## Hinweise
 
