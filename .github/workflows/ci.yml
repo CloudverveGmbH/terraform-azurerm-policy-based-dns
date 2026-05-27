@@ -46,10 +46,10 @@ jobs:
         run: terraform fmt -check -recursive -diff
 
       - name: Terraform init (no backend)
-        run: terraform init -backend=false
+        run: terraform -chdir=examples/ci-validate init -backend=false
 
       - name: Terraform validate
-        run: terraform validate
+        run: terraform -chdir=examples/ci-validate validate
 
   # ── 2. Native test suite ──────────────────────────────────────────────────────
   test:
