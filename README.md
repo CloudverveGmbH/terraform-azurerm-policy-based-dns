@@ -220,11 +220,17 @@ Behaviour:
 - The provided zone ID is used directly for policy assignments and RBAC.
 - If multiple active service keys share the same `zone_name`, they must all reference the same `existing_zone_id` (otherwise a module precondition will fail).
 
+> **Note:** Setting `existing_zone_id` in `service_overrides` is sufficient to activate the service key — no additional entry in `enabled_services` is required. The zone is used directly as-is (`create_zone = false`).
+>
+> If you want to activate a service key *without* `existing_zone_id` (e.g. to let the module look up the zone via data source), you still need to add the key to `enabled_services`.
+>
+> For fully custom keys not in the built-in catalog, `group_id` and `resource_type` must also be set in `service_overrides` — either alongside `existing_zone_id` or with an explicit `zone_name`.
+
 ## AI Disclosure
 
-- Parts of this README were drafted with AI assistance to improve clarity and speed up documentation work.
+- This module (Terraform code, tests, and documentation) was built with AI assistance (GitHub Copilot / Claude).
 - All technical content should be reviewed and validated by a human before use in production or critical environments.
-- This documentation is provided as-is, without warranty or guarantee of completeness, accuracy, or fitness for a specific purpose.
+- This module is provided as-is, without warranty or guarantee of completeness, accuracy, or fitness for a specific purpose.
 
 ---
 
@@ -452,8 +458,14 @@ Verhalten:
 - Die angegebene Zone-ID wird direkt für die Policy-Assignments/RBAC verwendet.
 - Wenn mehrere aktivierte Service-Keys auf dieselbe `zone_name` zeigen, müssen sie auf dieselbe `existing_zone_id` zeigen (sonst schlägt ein Modul-Check fehl).
 
+> **Hinweis:** Das Setzen von `existing_zone_id` in `service_overrides` reicht aus, um den Service-Key zu aktivieren — kein zusätzlicher Eintrag in `enabled_services` erforderlich. Die Zone wird direkt verwendet (`create_zone = false`).
+>
+> Wenn ein Service-Key *ohne* `existing_zone_id` aktiviert werden soll (z. B. damit das Modul die Zone per Data Source nachschlägt), muss der Key weiterhin in `enabled_services` eingetragen werden.
+>
+> Für vollständig eigene Keys, die nicht im eingebauten Catalog stehen, müssen `group_id` und `resource_type` ebenfalls in `service_overrides` gesetzt sein — entweder zusammen mit `existing_zone_id` oder mit einem expliziten `zone_name`.
+
 ## AI-Hinweis
 
-- Teile dieser README wurden mit KI-Unterstützung erstellt, um die Dokumentation schneller und verständlicher zu machen.
+- Dieses Modul (Terraform-Code, Tests und Dokumentation) wurde mit KI-Unterstützung erstellt (GitHub Copilot / Claude).
 - Alle technischen Inhalte sollten vor produktivem oder kritischem Einsatz von einer Person geprüft und bestätigt werden.
-- Diese Dokumentation wird ohne Gewähr bereitgestellt; Vollständigkeit, Richtigkeit und Eignung für einen bestimmten Zweck sind nicht garantiert.
+- Dieses Modul wird ohne Gewähr bereitgestellt; Vollständigkeit, Richtigkeit und Eignung für einen bestimmten Zweck sind nicht garantiert.

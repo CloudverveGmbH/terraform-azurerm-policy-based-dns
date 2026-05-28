@@ -124,6 +124,8 @@ One **User-Assigned Managed Identity** is shared across all policy assignments:
 
 ## Test suite
 
+> **Agent instruction:** After every code change to this module, always run `terraform test` automatically and report the result. Do not consider a task complete until the test suite passes (or explicitly discuss any failing tests with the user).
+
 Run from the module directory:
 
 ```bash
