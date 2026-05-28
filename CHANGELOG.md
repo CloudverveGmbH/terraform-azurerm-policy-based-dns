@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Changed github workflow to be PR based ([#4](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/4))
+
+### Fixed
+- `existing_zone_id` now properly gets resource types and group id for assignments ([#4](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/4))
+
+
 ## [0.0.3] - 2026-05-28
 ### Fixed
 - ´existing_zone_id` is now enough to manage a service in a different private dns zone, if the key matches one in the catalog
