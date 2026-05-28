@@ -114,6 +114,9 @@ jobs:
       - name: Terraform validate
         run: terraform -chdir=examples/ci-validate validate
 
+      - name: Terraform init — module root (for tests)
+        run: terraform init -backend=false
+
       - name: Run Terraform tests
         run: terraform test -verbose
 
