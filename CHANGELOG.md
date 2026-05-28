@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Github release flow is now done manually. Changed actions for that ([#8](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/8))
+
+
 ## [0.0.5]
 ### Changed
 - Changed github workflow to be PR based ([#4](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/4))
