@@ -1,4 +1,4 @@
-# private_dns_policy
+# private_dns_policy [![CI](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/actions/workflows/ci.yml/badge.svg)](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/actions/workflows/ci.yml)
 
 A reusable Terraform module that automates private DNS registration for Azure Private Endpoints using a `DeployIfNotExists` policy (DINE pattern, following Microsoft CAF).
 
