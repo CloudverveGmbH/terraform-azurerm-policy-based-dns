@@ -237,6 +237,122 @@ run "existing_zone_id_override_is_used" {
   }
 }
 
+run "existing_zone_id_auto_activates_catalog_key" {
+  # A catalog key with only existing_zone_id in service_overrides (no enabled_services entry)
+  # must be auto-activated with create_zone=false and use the provided ID directly.
+  command = plan
+
+  variables {
+    location                       = "germanywestcentral"
+    region_code                    = "gwc"
+    dns_resource_group_name        = "rg-dns"
+    policy_definition_name         = "test-def"
+    policy_definition_display_name = "test-def"
+    policy_assignment_scope_ids    = {}
+    enabled_categories             = null
+    enabled_services               = null
+    service_overrides = {
+      aks = {
+        existing_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.Network/privateDnsZones/privatelink.germanywestcentral.azmk8s.io"
+      }
+    }
+  }
+
+  assert {
+    condition     = contains(keys(output.effective_subresource_zone_map), "aks")
+    error_message = "Expected aks to be auto-activated when existing_zone_id is set in service_overrides."
+  }
+
+  assert {
+    condition     = output.effective_subresource_zone_map["aks"].create_zone == false
+    error_message = "Expected aks auto-activated via existing_zone_id to have create_zone=false."
+  }
+
+  assert {
+    condition     = output.zone_ids["privatelink.germanywestcentral.azmk8s.io"] == "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.Network/privateDnsZones/privatelink.germanywestcentral.azmk8s.io"
+    error_message = "Expected zone_ids to use the provided existing_zone_id directly."
+  }
+}
+
+run "existing_zone_id_auto_activates_multiple_catalog_keys" {
+  # Multiple catalog keys with only existing_zone_id — all must be auto-activated,
+  # no enabled_services entries needed.
+  command = plan
+
+  variables {
+    location                       = "germanywestcentral"
+    region_code                    = "gwc"
+    dns_resource_group_name        = "rg-dns"
+    policy_definition_name         = "test-def"
+    policy_definition_display_name = "test-def"
+    policy_assignment_scope_ids    = {}
+    enabled_categories             = null
+    enabled_services               = null
+    service_overrides = {
+      aks = {
+        existing_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.Network/privateDnsZones/privatelink.germanywestcentral.azmk8s.io"
+      }
+      vault = {
+        existing_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-security/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+      }
+    }
+  }
+
+  assert {
+    condition     = contains(keys(output.effective_subresource_zone_map), "aks")
+    error_message = "Expected aks to be auto-activated."
+  }
+
+  assert {
+    condition     = contains(keys(output.effective_subresource_zone_map), "vault")
+    error_message = "Expected vault to be auto-activated."
+  }
+
+  assert {
+    condition     = length(output.effective_subresource_zone_map) == 2
+    error_message = "Expected exactly 2 active services (aks + vault), nothing else."
+  }
+}
+
+run "existing_zone_id_combined_with_category" {
+  # Category activates several services; one of them also has existing_zone_id.
+  # The existing_zone_id must win for that key's zone resolution.
+  command = plan
+
+  variables {
+    location                       = "germanywestcentral"
+    region_code                    = "gwc"
+    dns_resource_group_name        = "rg-dns"
+    policy_definition_name         = "test-def"
+    policy_definition_display_name = "test-def"
+    policy_assignment_scope_ids    = {}
+    enabled_categories = {
+      Security = true
+    }
+    enabled_services = null
+    service_overrides = {
+      vault = {
+        existing_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-security/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+      }
+    }
+  }
+
+  assert {
+    condition     = contains(keys(output.effective_subresource_zone_map), "vault")
+    error_message = "Expected vault to be active (via Security category)."
+  }
+
+  assert {
+    condition     = output.zone_ids["privatelink.vaultcore.azure.net"] == "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-security/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+    error_message = "Expected vault zone_id to use existing_zone_id from service_overrides, not a created/looked-up zone."
+  }
+
+  assert {
+    condition     = contains(keys(output.effective_subresource_zone_map), "managedhsm")
+    error_message = "Expected managedhsm to also be active (from Security category)."
+  }
+}
+
 run "vnet_links_created_for_managed_zones_only" {
   # VNet links are created for zones Terraform manages (create_zone=true).
   # Zones referenced with create_zone=false (data source) or existing_zone_id get no link.

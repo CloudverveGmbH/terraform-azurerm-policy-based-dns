@@ -200,9 +200,40 @@ locals {
     if !contains(keys(local.category_service_keys), category)
   ]
 
+  # Any key in service_overrides with existing_zone_id is auto-activated (create_zone = false).
+  # This covers both catalog keys (e.g. aks) and fully custom keys — no enabled_services entry required.
+  override_auto_activated = {
+    for key, override in coalesce(var.service_overrides, {}) :
+    key => override
+    if try(override.existing_zone_id, null) != null
+  }
+
+  # Keys in service_overrides that are NOT in the catalog, have no existing_zone_id auto-activation,
+  # but carry enough data to be treated as fully custom entries (group_id + resource_type + zone_name).
+  custom_override_entries = {
+    for key, override in coalesce(var.service_overrides, {}) :
+    key => override
+    if !contains(keys(local.service_catalog), key)
+    && !contains(keys(local.override_auto_activated), key)
+    && try(override.group_id, null) != null
+    && try(override.resource_type, null) != null
+    && try(override.zone_name, null) != null
+  }
+
+  # Keys in service_overrides that are NOT in the catalog, NOT auto-activated via existing_zone_id,
+  # and do NOT carry enough data — likely typos or incomplete configs.
+  incomplete_custom_override_entries = [
+    for key, override in coalesce(var.service_overrides, {}) : key
+    if !contains(keys(local.service_catalog), key)
+    && !contains(keys(local.override_auto_activated), key)
+    && !contains(keys(local.custom_override_entries), key)
+  ]
+
   unknown_enabled_services = [
     for service_key, _ in local.normalized_enabled_services : service_key
     if !contains(keys(local.service_catalog), service_key)
+    && !contains(keys(local.override_auto_activated), service_key)
+    && !contains(keys(local.custom_override_entries), service_key)
   ]
 
   selected_from_categories = length(local.normalized_enabled_categories) > 0 ? merge([
@@ -211,12 +242,21 @@ locals {
     }
   ]...) : {}
 
-  selected_service_create_zone = merge(local.selected_from_categories, local.normalized_enabled_services)
+  # override_auto_activated and custom_override_entries are always activated with create_zone = false.
+  # explicit enabled_services / enabled_categories entries override that if needed.
+  selected_service_create_zone = merge(
+    { for key, _ in local.override_auto_activated : key => false },
+    { for key, _ in local.custom_override_entries : key => false },
+    local.selected_from_categories,
+    local.normalized_enabled_services
+  )
 
   computed_subresource_zone_map = {
     for service_key, create_zone in local.selected_service_create_zone :
     service_key => merge(
-      local.service_catalog[service_key],
+      # For custom override entries (not in catalog), the base is empty —
+      # all required fields must come from service_overrides.
+      try(local.service_catalog[service_key], {}),
       try(var.service_overrides[service_key], {}),
       {
         zone_name = replace(
@@ -224,7 +264,10 @@ locals {
             replace(
               coalesce(
                 try(var.service_overrides[service_key].zone_name, null),
-                local.service_catalog[service_key].zone_name
+                try(local.service_catalog[service_key].zone_name, null),
+                # Derive zone_name from existing_zone_id last path segment as last resort
+                # (e.g. ".../privateDnsZones/privatelink.westeurope.azmk8s.io" → the zone name)
+                try(reverse(split("/", var.service_overrides[service_key].existing_zone_id))[0], null)
               ),
               "{location}",
               lower(var.location)
@@ -254,6 +297,13 @@ check "known_enabled_services" {
   assert {
     condition     = length(local.unknown_enabled_services) == 0
     error_message = "Unknown service key(s) in enabled_services: ${join(", ", local.unknown_enabled_services)}"
+  }
+}
+
+check "complete_custom_override_entries" {
+  assert {
+    condition     = length(local.incomplete_custom_override_entries) == 0
+    error_message = "service_overrides key(s) not found in catalog and missing required fields (group_id, resource_type, and zone_name or existing_zone_id): ${join(", ", local.incomplete_custom_override_entries)}. Either fix the typo, add group_id + resource_type + zone_name/existing_zone_id, or activate the key via enabled_services."
   }
 }
 
