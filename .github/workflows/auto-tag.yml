@@ -103,10 +103,12 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BUMP="${{ github.event.inputs.bump }}"
           else
-            PR_TITLE="${{ github.event.pull_request.title }}"
-            PR_BODY="${{ github.event.pull_request.body }}"
+            PR_TITLE=$(printf '%s' '${{ toJSON(github.event.pull_request.title) }}' | jq -r '.')
+            PR_BODY=$(printf '%s' '${{ toJSON(github.event.pull_request.body) }}' | jq -r '.')
             COMMIT_MSG=$(git log -1 --pretty=%B)
-            TEXT="${PR_TITLE}\n${PR_BODY}\n${COMMIT_MSG}"
+            TEXT="${PR_TITLE}
+${PR_BODY}
+${COMMIT_MSG}"
 
             echo "PR title: ${PR_TITLE}"
 

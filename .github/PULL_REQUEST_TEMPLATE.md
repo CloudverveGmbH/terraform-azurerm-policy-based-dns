@@ -21,7 +21,7 @@ The block between the markers below will be extracted automatically and replace 
 -
 <!-- /KEEPACHANGELOG -->
 
-_Remove any empty sub-sections above before opening the PR._
+_Empty sub-sections are removed automatically. A `([#N](…))` link is appended to each bullet by CI._
 
 ## Checklist
 
