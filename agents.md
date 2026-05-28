@@ -144,6 +144,10 @@ Current test runs (`selection_logic.tftest.hcl`):
 | `existing_zone_id_override_is_used` | existing_zone_id bypasses create/lookup, ID used directly |
 | `hybrid_category_with_blob_as_existing_zone` | Hybrid(3 services) + blob=false+existing_zone_id → 4 assignments, 1 deduplicated RG scope |
 | `rg_scopes_deduplicated_with_multiple_services` | 2 RG scopes with many services → exactly 2 unique scopes |
+| `existing_zone_id_auto_activates_catalog_key` | Catalog key with only existing_zone_id in service_overrides is auto-activated, no enabled_services needed |
+| `existing_zone_id_auto_activates_multiple_catalog_keys` | Multiple catalog keys auto-activated via existing_zone_id only |
+| `existing_zone_id_combined_with_category` | Category activates services; one of them also has existing_zone_id → zone_id from override wins |
+| `vnet_links_created_for_managed_zones_only` | VNet links created only for create_zone=true zones; data source and existing_zone_id zones get no link |
 
 ---
 

@@ -214,10 +214,10 @@ locals {
     for key, override in coalesce(var.service_overrides, {}) :
     key => override
     if !contains(keys(local.service_catalog), key)
-      && !contains(keys(local.override_auto_activated), key)
-      && try(override.group_id, null) != null
-      && try(override.resource_type, null) != null
-      && try(override.zone_name, null) != null
+    && !contains(keys(local.override_auto_activated), key)
+    && try(override.group_id, null) != null
+    && try(override.resource_type, null) != null
+    && try(override.zone_name, null) != null
   }
 
   # Keys in service_overrides that are NOT in the catalog, NOT auto-activated via existing_zone_id,
@@ -225,15 +225,15 @@ locals {
   incomplete_custom_override_entries = [
     for key, override in coalesce(var.service_overrides, {}) : key
     if !contains(keys(local.service_catalog), key)
-      && !contains(keys(local.override_auto_activated), key)
-      && !contains(keys(local.custom_override_entries), key)
+    && !contains(keys(local.override_auto_activated), key)
+    && !contains(keys(local.custom_override_entries), key)
   ]
 
   unknown_enabled_services = [
     for service_key, _ in local.normalized_enabled_services : service_key
     if !contains(keys(local.service_catalog), service_key)
-      && !contains(keys(local.override_auto_activated), service_key)
-      && !contains(keys(local.custom_override_entries), service_key)
+    && !contains(keys(local.override_auto_activated), service_key)
+    && !contains(keys(local.custom_override_entries), service_key)
   ]
 
   selected_from_categories = length(local.normalized_enabled_categories) > 0 ? merge([
