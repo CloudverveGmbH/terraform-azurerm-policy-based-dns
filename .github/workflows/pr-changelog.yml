@@ -7,6 +7,8 @@ on:
       - synchronize
       - reopened
       - edited
+      - labeled
+      - unlabeled
       - ready_for_review
     branches:
       - main
@@ -25,7 +27,7 @@ concurrency:
 
 jobs:
   update-changelog:
-    name: Update CHANGELOG.md (Unreleased)
+    name: Update CHANGELOG.md
     runs-on: ubuntu-latest
     if: >
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -37,6 +39,48 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
+
+      # If the PR carries a bump label (bump:patch / bump:minor / bump:major),
+      # pre-compute the next version and use it as the CHANGELOG heading so
+      # CHANGELOG.md is already versioned before the PR is merged.
+      # Without a bump label the heading stays as ## [Unreleased].
+      - name: Compute changelog heading from PR labels
+        id: heading
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          LABELS_STR=$(printf '%s' "$LABELS" | jq -r '.[]' | tr '\n' ' ')
+          echo "PR labels: $LABELS_STR"
+
+          BUMP=""
+          if echo "$LABELS_STR" | grep -q 'bump:major'; then BUMP=major
+          elif echo "$LABELS_STR" | grep -q 'bump:minor'; then BUMP=minor
+          elif echo "$LABELS_STR" | grep -q 'bump:patch'; then BUMP=patch
+          fi
+
+          if [ -z "$BUMP" ]; then
+            echo "No bump label — using [Unreleased] heading."
+            echo "heading=## [Unreleased]" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
+          if [ -z "$LATEST" ]; then LATEST="v0.0.0"; fi
+
+          MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
+          MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
+          PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+          DATE=$(date -u +%Y-%m-%d)
+          echo "Pre-stamping with version: $NEXT"
+          echo "heading=## [${NEXT}] \u2014 ${DATE}" >> "$GITHUB_ENV"
 
       - name: Extract changelog block from PR body
         id: extract
@@ -107,18 +151,21 @@ jobs:
       - name: Replace [Unreleased] block in CHANGELOG.md
         if: env.no_markers == 'false'
         run: |
-          # Replace from ## [Unreleased] up to (not including) the next ## [
-          # Block content is read from file to avoid awk variable escaping issues
-          awk '
-            /^## \[Unreleased\]/ {
-              printing=1
-              print
-              print ""
-              while ((getline line < "/tmp/changelog_block.txt") > 0) print line
-              print ""
-              next
+          HEADING="$heading"
+          # Replace from the first ## [...] heading up to (not including) the next ## [
+          awk -v hdg="$HEADING" '
+            /^## \[/ {
+              if (!done) {
+                printing=1
+                done=1
+                print hdg
+                print ""
+                while ((getline line < "/tmp/changelog_block.txt") > 0) print line
+                print ""
+                next
+              }
             }
-            printing && /^## \[/ { printing=0 }
+            done && /^## \[/ { printing=0 }
             !printing { print }
           ' CHANGELOG.md > /tmp/CHANGELOG.new
 

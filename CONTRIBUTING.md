@@ -59,36 +59,54 @@ The PR cannot be merged until all checks pass.
 
 ## Merging and releasing
 
+### Version stamping — before you open the PR
+
+`release.yml` has no write access to `main`. It only reads `CHANGELOG.md` and creates the GitHub Release. This means **the version heading must already be correct in `CHANGELOG.md` on `main` at the time the release runs**.
+
+The cleanest way to achieve this is to stamp the version while the PR is still open:
+
+**Option A — PR label (recommended)**
+
+Apply one of these labels to the PR:
+
+| Label | Effect |
+|---|---|
+| `bump:patch` | `v1.0.0 → v1.0.1` |
+| `bump:minor` | `v1.0.0 → v1.1.0` |
+| `bump:major` | `v1.0.0 → v2.0.0` |
+
+The `pr-changelog.yml` workflow detects the label, reads the current latest tag, computes the next version, and uses it as the `CHANGELOG.md` heading (e.g. `## [v0.0.6] — 2026-05-28`) instead of `## [Unreleased]`. The commit to the PR branch happens automatically.
+
+**If two PRs are open at the same time**, both may compute the same next version from the current latest tag. The second one to merge will be off by one. After the first PR is merged and tagged, re-apply the label on the second PR — the workflow re-runs and recalculates from the now-updated latest tag.
+
+**Option B — edit manually**
+
+Directly edit `CHANGELOG.md` on your PR branch and change `## [Unreleased]` to `## [v0.0.6] — 2026-05-28`. No label needed.
+
+**Without any label**, the heading stays as `## [Unreleased]`. The release will still be created, using the `[Unreleased]` block content as release notes — but the heading in `CHANGELOG.md` on `main` won't be versioned until someone manually fixes it.
+
 ### On merge to `main` → `auto-tag.yml`
 
-Automatically bumps the semver tag:
+Automatically bumps the semver tag using the same bump-label logic (or commit message markers as fallback):
 
-| PR title / body contains | Bump |
+| PR label or text in title/body | Bump |
 |---|---|
-| `[major]` | `v1.0.0 → v2.0.0` |
-| `[minor]` | `v1.0.0 → v1.1.0` |
+| `bump:major` / `[major]` | `v1.0.0 → v2.0.0` |
+| `bump:minor` / `[minor]` | `v1.0.0 → v1.1.0` |
 | _(anything else)_ | `v1.0.0 → v1.0.1` (patch) |
 
-The new tag is pushed to `main`, which triggers `release.yml`.
+The new tag is pushed, which triggers `release.yml`.
 
 ### `release.yml` (triggered by Auto Tag)
 
-1. **Test gate** — full CI suite runs against the new tag. Release is aborted if any test fails.
-2. **Stamp CHANGELOG.md** — `## [Unreleased]` is rewritten to `## [vX.Y.Z] — YYYY-MM-DD` and a fresh empty `## [Unreleased]` is inserted above it. Committed directly to `main`.
-3. **GitHub Release** — created with the content of the stamped changelog block as release notes, plus a vendored ALZ policy metadata table and a usage snippet.
+1. **Test gate** — full CI suite runs against the tag. Release is blocked on failure.
+2. **GitHub Release** — the topmost `## [...]` block in `CHANGELOG.md` on `main` is extracted as release notes, combined with the vendored ALZ policy metadata table and a usage snippet.
 
 ---
 
 ## Version bump markers
 
-To control the semver bump, add a marker anywhere in the PR title, PR description, or last commit message:
-
-```
-[minor] add support for management group assignment scopes
-[major] remove legacy zone lookup fallback
-```
-
-Patch is the default — no marker needed for bug fixes or small changes.
+PR labels (`bump:patch`, `bump:minor`, `bump:major`) are the primary way to control the bump. Both `pr-changelog.yml` (for pre-stamping) and `auto-tag.yml` (for the actual tag) read the labels.\n\nAs a fallback, `auto-tag.yml` also scans the PR title, PR body, and last commit message for text markers:\n\n```\n[minor] add support for management group assignment scopes\n[major] remove legacy zone lookup fallback\n```\n\nPatch is the default — no label or marker needed for bug fixes or small changes.
 
 ---
 

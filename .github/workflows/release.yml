@@ -120,75 +120,34 @@ jobs:
       - name: Run Terraform tests
         run: terraform test -verbose
 
-  # ── 2. Stamp CHANGELOG.md on main + create GitHub Release ─────────────────────
+  # ── 2. Create GitHub Release ─────────────────────────────────────────────────
   #
-  # BRANCH PROTECTION NOTE:
-  #   This job commits CHANGELOG.md directly to main. For this to work, the
-  #   GitHub Actions bot must be allowed to bypass branch protection:
-  #   Settings → Branches → main → "Allow specified actors to bypass required
-  #   pull request reviews" → add "github-actions[bot]".
-  #   Alternatively, supply a PAT via secrets.CHANGELOG_PAT and set:
-  #     token: ${{ secrets.CHANGELOG_PAT }}
-  #   in the checkout step below.
+  # Extracts the topmost versioned block from CHANGELOG.md on main as release
+  # notes. No commits are made — CHANGELOG.md is already correctly versioned
+  # because the PR author stamped the version heading before merging.
   publish:
-    name: Stamp CHANGELOG + GitHub Release
+    name: GitHub Release
     runs-on: ubuntu-latest
     needs:
       - resolve_tag
       - test
     if: needs.resolve_tag.outputs.should_run == 'true'
     steps:
-      # Checkout main (not the tag) so we can push CHANGELOG.md back.
-      - name: Checkout main (full history)
+      - name: Checkout main
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: main
 
-      - name: Extract [Unreleased] content for release notes
-        id: release_notes
+      - name: Extract release notes from CHANGELOG.md
         run: |
-          TAG="${{ needs.resolve_tag.outputs.tag }}"
-
-          # Extract everything between ## [Unreleased] and the next ## [ heading
-          awk '/^## \[Unreleased\]/{found=1; next}
-               found && /^## \[/{exit}
-               found { print }' CHANGELOG.md \
+          # Extract the content of the first ## [...] block (skip the heading line itself)
+          awk '/^## \[/{if(found) exit; found=1; next} found { print }' CHANGELOG.md \
             | sed -e '/[^[:space:]]/,$!d' \
             > /tmp/release_notes.txt
 
           echo "Extracted release notes:"
           cat /tmp/release_notes.txt
-
-      - name: Stamp version and date in CHANGELOG.md
-        run: |
-          TAG="${{ needs.resolve_tag.outputs.tag }}"
-          DATE=$(date -u +%Y-%m-%d)
-
-          sed -i "s|^## \[Unreleased\]|## [${TAG}] — ${DATE}|" CHANGELOG.md
-
-          # Add a blank [Unreleased] section at the top for the next cycle
-          awk -v tag="$TAG" '
-            /^## \['"$TAG"'\]/ && !done {
-              print "## [Unreleased]\n"
-              done=1
-            }
-            { print }
-          ' CHANGELOG.md > /tmp/CHANGELOG.new
-
-          mv /tmp/CHANGELOG.new CHANGELOG.md
-
-      - name: Commit CHANGELOG.md to main
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          if git diff --staged --quiet; then
-            echo "No CHANGELOG changes to commit."
-          else
-            git commit -m "chore: stamp CHANGELOG.md for ${{ needs.resolve_tag.outputs.tag }}"
-            git push origin main
-          fi
 
       - name: Extract vendored policy version
         id: policy_version
