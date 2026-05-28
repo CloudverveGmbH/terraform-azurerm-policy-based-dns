@@ -117,7 +117,7 @@ jobs:
       - name: Run Terraform tests
         run: terraform test -verbose
 
-  # ── 2. Update CHANGELOG.md on main + create GitHub Release ───────────────────
+  # ── 2. Stamp CHANGELOG.md on main + create GitHub Release ─────────────────────
   #
   # BRANCH PROTECTION NOTE:
   #   This job commits CHANGELOG.md directly to main. For this to work, the
@@ -128,7 +128,7 @@ jobs:
   #     token: ${{ secrets.CHANGELOG_PAT }}
   #   in the checkout step below.
   publish:
-    name: Changelog + GitHub Release
+    name: Stamp CHANGELOG + GitHub Release
     runs-on: ubuntu-latest
     needs:
       - resolve_tag
@@ -136,24 +136,44 @@ jobs:
     if: needs.resolve_tag.outputs.should_run == 'true'
     steps:
       # Checkout main (not the tag) so we can push CHANGELOG.md back.
-      # The tag was just created on the HEAD of main by auto-tag.yml, so
-      # checking out main gives us the exact same tree.
       - name: Checkout main (full history)
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
         with:
           fetch-depth: 0
           ref: main
 
-      - name: Generate CHANGELOG.md with git-cliff
-        id: cliff
-        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
-        with:
-          config: .github/cliff.toml
-          args: --verbose --tag ${{ needs.resolve_tag.outputs.tag }}
-        env:
-          OUTPUT: CHANGELOG.md
-          GITHUB_REPO: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract [Unreleased] content for release notes
+        id: release_notes
+        run: |
+          TAG="${{ needs.resolve_tag.outputs.tag }}"
+
+          # Extract everything between ## [Unreleased] and the next ## [ heading
+          awk '/^## \[Unreleased\]/{found=1; next}
+               found && /^## \[/{exit}
+               found { print }' CHANGELOG.md \
+            | sed -e '/[^[:space:]]/,$!d' \
+            > /tmp/release_notes.txt
+
+          echo "Extracted release notes:"
+          cat /tmp/release_notes.txt
+
+      - name: Stamp version and date in CHANGELOG.md
+        run: |
+          TAG="${{ needs.resolve_tag.outputs.tag }}"
+          DATE=$(date -u +%Y-%m-%d)
+
+          sed -i "s|^## \[Unreleased\]|## [${TAG}] — ${DATE}|" CHANGELOG.md
+
+          # Add a blank [Unreleased] section at the top for the next cycle
+          awk -v tag="$TAG" '
+            /^## \['"$TAG"'\]/ && !done {
+              print "## [Unreleased]\n"
+              done=1
+            }
+            { print }
+          ' CHANGELOG.md > /tmp/CHANGELOG.new
+
+          mv /tmp/CHANGELOG.new CHANGELOG.md
 
       - name: Commit CHANGELOG.md to main
         run: |
@@ -163,7 +183,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No CHANGELOG changes to commit."
           else
-            git commit -m "chore: update CHANGELOG.md for ${{ needs.resolve_tag.outputs.tag }}"
+            git commit -m "chore: stamp CHANGELOG.md for ${{ needs.resolve_tag.outputs.tag }}"
             git push origin main
           fi
 
@@ -178,10 +198,9 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ needs.resolve_tag.outputs.tag }}
-          # body_path writes the cliff-generated release section as the release body.
-          # This is the content between the current and previous tag.
+          body_path: /tmp/release_notes.txt
+          append_body: true
           body: |
-            ${{ steps.cliff.outputs.content }}
 
             ---
 

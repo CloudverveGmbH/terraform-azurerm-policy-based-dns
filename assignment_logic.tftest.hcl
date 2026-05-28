@@ -34,8 +34,8 @@ run "rg_scopes_deduplicated_with_multiple_services" {
     policy_definition_name         = "test-def"
     policy_definition_display_name = "test-def"
     policy_assignment_scope_ids = {
-      rg1 = "/subscriptions/35fd1a36-57d7-499b-8234-96084acac0aa/resourceGroups/rg-clv-connectivity-weu"
-      rg2 = "/subscriptions/35fd1a36-57d7-499b-8234-96084acac0aa/resourceGroups/rg-another-workload"
+      rg1 = "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/rg-clv-connectivity-weu"
+      rg2 = "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/rg-another-workload"
     }
     enabled_categories = {
       Storage = true
@@ -50,12 +50,12 @@ run "rg_scopes_deduplicated_with_multiple_services" {
   }
 
   assert {
-    condition     = contains(output.rg_assignment_scopes, "/subscriptions/35fd1a36-57d7-499b-8234-96084acac0aa/resourceGroups/rg-clv-connectivity-weu")
+    condition     = contains(output.rg_assignment_scopes, "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/rg-clv-connectivity-weu")
     error_message = "Expected rg1 to be in rg_assignment_scopes"
   }
 
   assert {
-    condition     = contains(output.rg_assignment_scopes, "/subscriptions/35fd1a36-57d7-499b-8234-96084acac0aa/resourceGroups/rg-another-workload")
+    condition     = contains(output.rg_assignment_scopes, "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/rg-another-workload")
     error_message = "Expected rg2 to be in rg_assignment_scopes"
   }
 }
@@ -190,6 +190,59 @@ run "reject_mg_assignment_without_definition_at_mg" {
   expect_failures = [
     azurerm_user_assigned_identity.policy_assignment
   ]
+}
+
+run "existing_zone_id_auto_activates_assignment" {
+  # A catalog key activated only via existing_zone_id in service_overrides (no enabled_services entry)
+  # must produce exactly the same policy assignment structure as a normally enabled service.
+  command = plan
+
+  variables {
+    location                       = "germanywestcentral"
+    region_code                    = "gwc"
+    dns_resource_group_name        = "rg-dns"
+    policy_definition_name         = "test-def"
+    policy_definition_display_name = "test-def"
+    policy_assignment_scope_ids = {
+      sub_main = "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    }
+    enabled_categories = null
+    enabled_services   = null
+    service_overrides = {
+      aks = {
+        existing_zone_id = "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/rg-aks/providers/Microsoft.Network/privateDnsZones/privatelink.germanywestcentral.azmk8s.io"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(output.subscription_assignment_scopes) == 1
+    error_message = "Expected exactly 1 subscription assignment scope for the auto-activated aks key."
+  }
+
+  assert {
+    condition     = contains(output.subscription_assignment_scopes, "/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    error_message = "Expected the subscription scope to appear in subscription_assignment_scopes."
+  }
+
+  assert {
+    condition     = length(output.rg_assignment_scopes) == 0
+    error_message = "Expected no RG assignment scopes — scope is subscription-level."
+  }
+
+  # These two asserts are the regression guard for the null-override bug:
+  # before the fix, optional(string) fields in service_overrides defaulted to null
+  # and overwrote the catalog values, causing Azure to reject the assignment with
+  # "PolicyParametersMissingValue: The policy parameters 'groupId,resourceType' are missing a value."
+  assert {
+    condition     = jsondecode(azurerm_subscription_policy_assignment.this["sub_main-aks"].parameters).groupId.value == "management"
+    error_message = "groupId parameter must be 'management' (from catalog). A null value here means service_overrides null fields overwrote the catalog."
+  }
+
+  assert {
+    condition     = jsondecode(azurerm_subscription_policy_assignment.this["sub_main-aks"].parameters).resourceType.value == "Microsoft.ContainerService/managedClusters"
+    error_message = "resourceType parameter must be 'Microsoft.ContainerService/managedClusters' (from catalog). A null value here means service_overrides null fields overwrote the catalog."
+  }
 }
 
 run "reject_overlapping_subscription_and_rg_assignment_scopes" {

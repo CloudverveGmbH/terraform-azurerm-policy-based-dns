@@ -14,7 +14,6 @@ on:
       - "**.tf"
       - "**.tftest.hcl"
       - "policy_definitions/**"
-      - ".github/cliff.toml"
 
 permissions:
   contents: write
@@ -28,7 +27,10 @@ jobs:
   update-changelog:
     name: Update CHANGELOG.md (Unreleased)
     runs-on: ubuntu-latest
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false && github.actor != 'github-actions[bot]'
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false &&
+      github.actor != 'github-actions[bot]'
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
@@ -36,18 +38,94 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Generate CHANGELOG.md with git-cliff
-        id: cliff
-        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
-        with:
-          config: .github/cliff.toml
-          args: --verbose --unreleased
+      - name: Extract changelog block from PR body
+        id: extract
         env:
-          OUTPUT: CHANGELOG.md
-          GITHUB_REPO: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ toJSON(github.event.pull_request.body) }}
+        run: |
+          # jq decodes the JSON-encoded string (handles \n, unicode, etc.)
+          printf '%s' "$PR_BODY" | jq -r '.' > /tmp/pr_body.txt
+
+          # Extract lines between <!-- KEEPACHANGELOG --> and <!-- /KEEPACHANGELOG -->
+          awk '/<!--[[:space:]]*KEEPACHANGELOG[[:space:]]*-->/{found=1; next}
+               /<!--[[:space:]]*\/KEEPACHANGELOG[[:space:]]*-->/{found=0}
+               found { print }' /tmp/pr_body.txt \
+            | sed -e '/[^[:space:]]/,$!d' \
+            > /tmp/changelog_raw.txt
+
+          # Remove empty sub-sections: ### Heading followed only by a bare "-" or blank lines
+          awk '
+            /^### / {
+              if (heading != "" && !has_content) { heading = ""; next_lines = "" }
+              if (heading != "") { printf "%s", next_lines }
+              heading = $0
+              next_lines = $0 "\n"
+              has_content = 0
+              next
+            }
+            heading != "" {
+              if (/^[[:space:]]*$/ || /^-[[:space:]]*$/) {
+                next_lines = next_lines $0 "\n"
+              } else {
+                has_content = 1
+                next_lines = next_lines $0 "\n"
+              }
+              next
+            }
+            { print }
+            END {
+              if (heading != "" && has_content) printf "%s", next_lines
+            }
+          ' /tmp/changelog_raw.txt \
+            | sed -e '/[^[:space:]]/,$!d' -e 's/[[:space:]]*$//' \
+            > /tmp/changelog_filtered.txt
+
+          # Append PR link to every top-level bullet (lines starting with "- ")
+          PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          PR_REF="([#${{ github.event.pull_request.number }}](${PR_URL}))"
+          awk -v ref="$PR_REF" '
+            /^- / { sub(/[[:space:]]*$/, ""); print $0 " " ref; next }
+            { print }
+          ' /tmp/changelog_filtered.txt > /tmp/changelog_block.txt
+
+          if [ -s /tmp/changelog_block.txt ]; then
+            echo "no_markers=false" >> "$GITHUB_ENV"
+          else
+            echo "no_markers=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Warn if markers missing
+        if: env.no_markers == 'true'
+        run: |
+          {
+            echo "### ⚠️ CHANGELOG not updated — no markers in PR description"
+            echo ""
+            echo "Add the following block to your PR description:"
+            printf '```\n<!-- KEEPACHANGELOG -->\n### Added\n- describe your change here\n<!-- /KEEPACHANGELOG -->\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Replace [Unreleased] block in CHANGELOG.md
+        if: env.no_markers == 'false'
+        run: |
+          # Replace from ## [Unreleased] up to (not including) the next ## [
+          # Block content is read from file to avoid awk variable escaping issues
+          awk '
+            /^## \[Unreleased\]/ {
+              printing=1
+              print
+              print ""
+              while ((getline line < "/tmp/changelog_block.txt") > 0) print line
+              print ""
+              next
+            }
+            printing && /^## \[/ { printing=0 }
+            !printing { print }
+          ' CHANGELOG.md > /tmp/CHANGELOG.new
+
+          mv /tmp/CHANGELOG.new CHANGELOG.md
 
       - name: Commit CHANGELOG.md to PR branch
+        if: env.no_markers == 'false'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -61,6 +139,7 @@ jobs:
           fi
 
       - name: PR summary
+        if: env.no_markers == 'false'
         run: |
-          echo "### 📝 CHANGELOG updated" >> "$GITHUB_STEP_SUMMARY"
-          echo "Updated \\`CHANGELOG.md\\` using git-cliff (Unreleased section)." >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📝 CHANGELOG updated from PR description" >> "$GITHUB_STEP_SUMMARY"
+          echo "Replaced \`[Unreleased]\` block in \`CHANGELOG.md\` with content from PR body." >> "$GITHUB_STEP_SUMMARY"

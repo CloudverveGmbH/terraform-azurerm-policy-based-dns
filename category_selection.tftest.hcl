@@ -272,6 +272,16 @@ run "existing_zone_id_auto_activates_catalog_key" {
     condition     = output.zone_ids["privatelink.germanywestcentral.azmk8s.io"] == "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.Network/privateDnsZones/privatelink.germanywestcentral.azmk8s.io"
     error_message = "Expected zone_ids to use the provided existing_zone_id directly."
   }
+
+  assert {
+    condition     = output.effective_subresource_zone_map["aks"].group_id == "management"
+    error_message = "Expected group_id to be preserved from catalog when only existing_zone_id is set in service_overrides."
+  }
+
+  assert {
+    condition     = output.effective_subresource_zone_map["aks"].resource_type == "Microsoft.ContainerService/managedClusters"
+    error_message = "Expected resource_type to be preserved from catalog when only existing_zone_id is set in service_overrides."
+  }
 }
 
 run "existing_zone_id_auto_activates_multiple_catalog_keys" {

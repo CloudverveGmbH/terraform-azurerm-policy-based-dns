@@ -257,7 +257,9 @@ locals {
       # For custom override entries (not in catalog), the base is empty —
       # all required fields must come from service_overrides.
       try(local.service_catalog[service_key], {}),
-      try(var.service_overrides[service_key], {}),
+      # Strip null-valued fields from service_overrides so optional(string) defaults
+      # do not overwrite non-null catalog values (e.g. group_id, resource_type).
+      { for k, v in try(var.service_overrides[service_key], {}) : k => v if v != null },
       {
         zone_name = replace(
           replace(
