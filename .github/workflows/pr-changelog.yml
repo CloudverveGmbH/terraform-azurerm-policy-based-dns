@@ -83,9 +83,15 @@ jobs:
       - name: Compute changelog heading from PR labels
         id: heading
         env:
-          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          LABELS_STR=$(printf '%s' "$LABELS" | jq -r '.[]' | tr '\n' ' ')
+          # For workflow_dispatch, fetch labels via API; for pull_request, use the event payload.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+            LABELS_STR=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json labels -q '.labels[].name' | tr '\n' ' ')
+          else
+            LABELS_STR=$(printf '%s' '${{ toJSON(github.event.pull_request.labels.*.name) }}' | jq -r '.[]' | tr '\n' ' ')
+          fi
           echo "PR labels: $LABELS_STR"
 
           BUMP=""
@@ -121,10 +127,15 @@ jobs:
       - name: Extract changelog block from PR body
         id: extract
         env:
-          PR_BODY: ${{ toJSON(github.event.pull_request.body) }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # jq decodes the JSON-encoded string (handles \n, unicode, etc.)
-          printf '%s' "$PR_BODY" | jq -r '.' > /tmp/pr_body.txt
+          # Fetch PR body — via API for workflow_dispatch, via event payload for pull_request.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+            gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json body -q '.body' > /tmp/pr_body.txt
+          else
+            printf '%s' '${{ toJSON(github.event.pull_request.body) }}' | jq -r '.' > /tmp/pr_body.txt
+          fi
 
           # Extract lines between <!-- KEEPACHANGELOG --> and <!-- /KEEPACHANGELOG -->
           awk '/<!--[[:space:]]*KEEPACHANGELOG[[:space:]]*-->/{found=1; next}
