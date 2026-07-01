@@ -140,7 +140,6 @@ locals {
     siterecovery                 = { category = "Management", group_id = "AzureSiteRecovery", resource_type = "Microsoft.RecoveryServices/vaults", zone_name = "privatelink.siterecovery.windowsazure.com" }
     migrate_default              = { category = "Management", group_id = "Default", resource_type = "Microsoft.Migrate/migrateProjects", zone_name = "privatelink.prod.migration.windowsazure.com" }
     migrate_assessment           = { category = "Management", group_id = "Default", resource_type = "Microsoft.Migrate/assessmentProjects", zone_name = "privatelink.prod.migration.windowsazure.com" }
-    resource_manager             = { category = "Management", group_id = "ResourceManagement", resource_type = "Microsoft.Authorization/resourceManagementPrivateLinks", zone_name = "privatelink.azure.com" }
     grafana                      = { category = "Management", group_id = "grafana", resource_type = "Microsoft.Dashboard/grafana", zone_name = "privatelink.grafana.azure.com" }
     eventgrid_topic              = { category = "Management", group_id = "topic", resource_type = "Microsoft.EventGrid/topics", zone_name = "privatelink.eventgrid.azure.net" }
     eventgrid_domain             = { category = "Management", group_id = "domain", resource_type = "Microsoft.EventGrid/domains", zone_name = "privatelink.eventgrid.azure.net" }
@@ -166,6 +165,13 @@ locals {
     staticwebapp    = { category = "Web", group_id = "staticSites", resource_type = "Microsoft.Web/staticSites", zone_name = "privatelink.azurestaticapps.net" }
     maps_account    = { category = "Web", group_id = "account", resource_type = "Microsoft.Maps/accounts", zone_name = "privatelink.account.maps.azure.com" }
     webpubsub       = { category = "Web", group_id = "webpubsub", resource_type = "Microsoft.SignalRService/WebPubSub", zone_name = "privatelink.webpubsub.azure.com" }
+
+    # resource_manager is intentionally NOT in the Management category.
+    # Enabling the Management category would silently create privatelink.azure.com,
+    # which can break management.azure.com resolution in DNS forwarder environments
+    # (see check "resource_manager_dns_forwarder_caveat" and README "Known DNS Caveats").
+    # Use enabled_services = { resource_manager = true } for explicit opt-in.
+    resource_manager = { category = "Special", group_id = "ResourceManagement", resource_type = "Microsoft.Authorization/resourceManagementPrivateLinks", zone_name = "privatelink.azure.com" }
   }
 
   category_service_keys = {
@@ -313,6 +319,33 @@ check "unique_catalog_bindings" {
   assert {
     condition     = length(local.duplicate_catalog_bindings) == 0
     error_message = "Duplicate catalog binding(s) found (resource_type|group_id|zone_name): ${join("; ", local.duplicate_catalog_binding_details)}"
+  }
+}
+
+# Non-blocking warning: privatelink.azure.com DNS shadowing risk.
+# When the resource_manager service key is active with create_zone=true and VNet links are
+# configured, DNS forwarders may resolve management.azure.com to management.privatelink.azure.com.
+# The management A record is written automatically once the first Private Endpoint is deployed
+# (via the DINE policy), but there is a timing gap between zone creation and first endpoint
+# deployment during which ARM API calls from the VNet may fail.
+#
+# To trigger the DINE policy and populate the management A record:
+#   1. Create a Resource Management Private Link:
+#      azurerm_resource_management_private_link (Microsoft.Authorization/resourceManagementPrivateLinks)
+#   2. Create a Private Endpoint targeting that resource with subresource "ResourceManagement".
+#      The DINE policy will then deploy a privateDnsZoneGroup and Azure writes the A record.
+#   Docs: https://learn.microsoft.com/azure/azure-resource-manager/management/create-private-link-access-portal
+#
+# Mitigation for the timing gap: configure a conditional forwarder for management.azure.com
+# on your DNS resolver pointing to public DNS, so the private zone is bypassed for that name.
+check "resource_manager_dns_forwarder_caveat" {
+  assert {
+    condition = !(
+      contains(keys(local.effective_subresource_zone_map), "resource_manager")
+      && try(local.effective_subresource_zone_map["resource_manager"].create_zone, false) == true
+      && length(var.vnet_links) > 0
+    )
+    error_message = "The 'resource_manager' service key creates the privatelink.azure.com zone and links it to VNet(s). Until the first Resource Management Private Endpoint is deployed and the DINE policy writes the 'management' A record, DNS forwarders may fail to resolve management.azure.com — breaking Terraform pipelines and ARM API calls. Mitigation: configure a conditional forwarder for management.azure.com on your DNS resolver pointing to public DNS."
   }
 }
 

@@ -66,6 +66,11 @@ variable "enabled_categories" {
   type        = map(bool)
   default     = null
   nullable    = true
+
+  validation {
+    condition     = var.enabled_categories == null ? true : !contains(keys(var.enabled_categories), "Special")
+    error_message = "The 'Special' category cannot be activated via enabled_categories. Use enabled_services to opt in explicitly (e.g. enabled_services = { resource_manager = true })."
+  }
 }
 
 variable "enabled_services" {

@@ -47,6 +47,8 @@ The catalog is static. What gets activated is controlled exclusively by:
 | `enabled_categories` | `map(bool)` | Activate all services in a category; bool = `create_zone` |
 | `enabled_services` | `map(bool)` | Override individual service keys; bool = `create_zone` |
 
+**Note on `resource_manager`:** This service key (`privatelink.azure.com`) is intentionally placed in the `Special` category and is **not** activated by `enabled_categories = { Management = true }`. It must be enabled explicitly via `enabled_services = { resource_manager = true }` due to its DNS shadowing risk (see `check "resource_manager_dns_forwarder_caveat"`).
+
 Resolution order:
 1. Expand `enabled_categories` to service keys
 2. Merge `enabled_services` on top (overrides win)
@@ -148,6 +150,7 @@ Current test runs (`selection_logic.tftest.hcl`):
 | `existing_zone_id_auto_activates_multiple_catalog_keys` | Multiple catalog keys auto-activated via existing_zone_id only |
 | `existing_zone_id_combined_with_category` | Category activates services; one of them also has existing_zone_id → zone_id from override wins |
 | `vnet_links_created_for_managed_zones_only` | VNet links created only for create_zone=true zones; data source and existing_zone_id zones get no link |
+| `resource_manager_activates_special_service_key` | resource_manager in Special category activates only via enabled_services, correct zone_name |
 
 ---
 
