@@ -198,25 +198,47 @@ jobs:
             printf '```\n<!-- KEEPACHANGELOG -->\n### Added\n- describe your change here\n<!-- /KEEPACHANGELOG -->\n```\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Replace [Unreleased] block in CHANGELOG.md
+      - name: Update CHANGELOG block
         if: env.no_markers == 'false'
         run: |
           HEADING="$heading"
-          # Replace from the first ## [...] heading up to (not including) the next ## [
-          awk -v hdg="$HEADING" '
-            /^## \[/ {
-              if (!done) {
-                printing=1
+          PR_NUM="${{ github.event.inputs.pr_number }}${{ github.event.pull_request.number }}"
+
+          # Determine whether the top CHANGELOG block belongs to this PR:
+          #   1. Top heading is [Unreleased]                           → replace
+          #   2. Top block content already references #PR_NUM          → replace (re-run)
+          #   3. Top block belongs to a different PR / prior release   → prepend new block
+          TOP_HEADING=$(grep -m1 '^## \[' CHANGELOG.md || true)
+          TOP_BLOCK_REFS_THIS_PR=$(awk '/^## \[/{if(found) exit; found=1; next} found { print }' CHANGELOG.md \
+            | grep -c "\[#${PR_NUM}\]" || true)
+
+          if echo "$TOP_HEADING" | grep -qi '\[Unreleased\]' || [ "${TOP_BLOCK_REFS_THIS_PR}" -gt 0 ]; then
+            # Replace: drop the existing top block, write the new one in its place
+            awk -v hdg="$HEADING" '
+              /^## \[/ {
+                if (!done) {
+                  printing=1; done=1
+                  print hdg
+                  while ((getline line < "/tmp/changelog_block.txt") > 0) print line
+                  print ""
+                  next
+                }
+              }
+              done && /^## \[/ { printing=0 }
+              !printing { print }
+            ' CHANGELOG.md > /tmp/CHANGELOG.new
+          else
+            # Prepend: insert a new block before the existing top
+            awk -v hdg="$HEADING" '
+              /^## \[/ && !done {
                 done=1
                 print hdg
                 while ((getline line < "/tmp/changelog_block.txt") > 0) print line
                 print ""
-                next
               }
-            }
-            done && /^## \[/ { printing=0 }
-            !printing { print }
-          ' CHANGELOG.md > /tmp/CHANGELOG.new
+              { print }
+            ' CHANGELOG.md > /tmp/CHANGELOG.new
+          fi
 
           mv /tmp/CHANGELOG.new CHANGELOG.md
 
