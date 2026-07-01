@@ -396,3 +396,39 @@ run "vnet_links_created_for_managed_zones_only" {
     error_message = "Expected VNet link key 'privatelink-blob-core-windows-net-dns_vnet' to exist."
   }
 }
+
+run "resource_manager_activates_special_service_key" {
+  # resource_manager is in the 'Special' category and must be opted in explicitly via
+  # enabled_services (not via enabled_categories). This run verifies basic activation
+  # and correct zone_name.
+  command = plan
+
+  variables {
+    location                       = "germanywestcentral"
+    region_code                    = "gwc"
+    dns_resource_group_name        = "rg-dns"
+    policy_definition_name         = "test-def"
+    policy_definition_display_name = "test-def"
+    policy_assignment_scope_ids    = {}
+    enabled_categories             = null
+    enabled_services = {
+      resource_manager = true
+    }
+    service_overrides = {}
+  }
+
+  assert {
+    condition     = contains(keys(output.effective_subresource_zone_map), "resource_manager")
+    error_message = "Expected resource_manager to be active."
+  }
+
+  assert {
+    condition     = output.effective_subresource_zone_map["resource_manager"].zone_name == "privatelink.azure.com"
+    error_message = "Expected resource_manager to use the privatelink.azure.com zone."
+  }
+
+  assert {
+    condition     = output.effective_subresource_zone_map["resource_manager"].create_zone == true
+    error_message = "Expected resource_manager to have create_zone=true."
+  }
+}

@@ -193,6 +193,20 @@ policy_assignment_scope_ids = {
 
 `DeployIfNotExists` acts primarily on new or re-evaluated resources. Existing Private Endpoints are not automatically remediated immediately; Azure Policy Remediation Tasks or a later compliance re-evaluation are required for those.
 
+## Known DNS Caveats
+
+### `privatelink.azure.com` — Azure Resource Manager endpoint shadowing
+
+**Affected service key:** `resource_manager`
+
+**Problem:** The `privatelink.azure.com` zone contains no A record for `management` by default. In environments where a DNS forwarder is in use, Azure returns a CNAME alias `management.azure.com → management.privatelink.azure.com`. Once the `privatelink.azure.com` zone is linked to a VNet, the forwarder resolves this CNAME within the private zone — finding no entry — and the resolution fails. This breaks any tool that calls the ARM API, including Terraform pipelines.
+
+The module emits a non-blocking `check` warning when this risky combination is detected (`resource_manager` active with `create_zone = true` + `vnet_links` configured).
+
+**Note on timing:** The `management` A record in `privatelink.azure.com` is **not** created by Terraform — it is written automatically by Azure when the first Resource Management Private Endpoint is deployed and the DINE policy fires. There is a short window between zone creation (Terraform apply) and the first endpoint deployment during which `management.azure.com` may be unresolvable from VNets linked to the zone.
+
+**Mitigation:** Configure a conditional forwarder (or DNS policy) on your DNS resolver so that `management.azure.com` is always forwarded to a public DNS resolver (e.g. `168.63.129.16` or `8.8.8.8`), bypassing the private zone for this name entirely.
+
 ## ALZ Policy Source (pinned)
 
 This module uses the ALZ [`Deploy-Private-DNS-Generic`](https://github.com/Azure/Enterprise-Scale/blob/main/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json) policy and bundles a pinned JSON snapshot with the module package.
@@ -343,6 +357,7 @@ Ergebnis:
 | `Media` | Media | media_keydelivery, media_liveevent, media_streamingendpoint, video_indexer |
 | `Management` | Management and Governance, Integration | azuremonitor, backup, siterecovery, grafana, purview, eventgrid, apim, healthcare, ... |
 | `Web` | Web | webapp, webapp_scm, staticwebapp, signalr, webpubsub, searchservice, relay, maps |
+| `Special` | — (nur explizit) | `resource_manager` — siehe [Known DNS Caveats](#privatelinkazurecom--azure-resource-manager-endpoint-shadowing) |
 
 ## Geteilte DNS-Zonen (Deduplication)
 
@@ -426,6 +441,20 @@ policy_assignment_scope_ids = {
   rg_app_prod_weu = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-app-prod-weu"
 }
 ```
+
+## Bekannte DNS-Hinweise
+
+### `privatelink.azure.com` — Azure Resource Manager Endpoint Shadowing
+
+**Betroffener Service-Key:** `resource_manager`
+
+**Problem:** Die Zone `privatelink.azure.com` enthält standardmäßig keinen A-Record für `management`. In Umgebungen mit einem DNS-Forwarder liefert Azure einen CNAME-Alias `management.azure.com → management.privatelink.azure.com`. Sobald die Zone mit einem VNet verknüpft ist, versucht der Forwarder, diesen CNAME in der privaten Zone aufzulösen — findet keinen Eintrag — und die Auflösung schlägt fehl. Das betrifft alle Tools, die die ARM-API nutzen, einschließlich Terraform-Pipelines.
+
+Das Modul gibt eine nicht-blockierende `check`-Warnung aus, wenn diese risikobehaftete Kombination erkannt wird (`resource_manager` aktiv mit `create_zone = true` + `vnet_links` konfiguriert).
+
+**Hinweis zum Timing:** Der `management`-A-Record in `privatelink.azure.com` wird **nicht** von Terraform erstellt — er wird automatisch von Azure geschrieben, sobald der erste Resource Management Private Endpoint deployed und die DINE-Policy ausgelöst wird. Zwischen Zone-Erstellung (Terraform apply) und erstem Endpoint-Deployment gibt es ein kurzes Zeitfenster, in dem `management.azure.com` aus VNets, die mit der Zone verknüpft sind, nicht auflösbar ist.
+
+**Abhilfe:** Konfiguriere einen Conditional Forwarder (oder eine DNS-Policy) auf deinem DNS-Resolver, sodass `management.azure.com` immer an einen öffentlichen DNS-Resolver (z. B. `168.63.129.16` oder `8.8.8.8`) weitergeleitet wird und die private Zone für diesen Namen umgangen wird.
 
 ## Remediation-Hinweis
 
