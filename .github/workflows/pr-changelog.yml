@@ -78,7 +78,7 @@ jobs:
             patch) PATCH=$((PATCH + 1)) ;;
           esac
 
-          NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+          NEXT="${MAJOR}.${MINOR}.${PATCH}"
           DATE=$(date -u +%Y-%m-%d)
           echo "Pre-stamping with version: $NEXT"
           echo "heading=## [${NEXT}] - ${DATE}" >> "$GITHUB_ENV"
