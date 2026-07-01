@@ -1,4 +1,20 @@
 name: PR Changelog
+#
+# Runs on every PR update targeting main.
+#
+# WHAT IT DOES:
+#   1. Reads the <!-- KEEPACHANGELOG --> block from the PR description.
+#   2. If a bump:patch / bump:minor / bump:major label is present, pre-stamps
+#      the CHANGELOG heading with the computed next version and today's date.
+#      Without a bump label the heading stays as ## [Unreleased].
+#   3. Re-runs on label changes — if the bump label changes after the heading
+#      was already stamped (e.g. patch → major), the heading is rewritten
+#      to the new version.
+#   4. Commits the updated CHANGELOG.md back to the PR branch.
+#
+# NOTE: The version written here is what release.yml reads after merge to
+#       decide whether to create a tag and GitHub Release. PRs without a
+#       bump label (heading stays [Unreleased]) will not trigger a release.
 
 on:
   pull_request:
@@ -17,6 +33,11 @@ on:
       - "**.tf"
       - "**.tftest.hcl"
       - "policy_definitions/**"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to re-stamp (e.g. 12). The PR must still be open."
+        required: true
 
 permissions:
   contents: write
@@ -31,14 +52,28 @@ jobs:
     name: Update CHANGELOG.md
     runs-on: ubuntu-latest
     if: >
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.draft == false &&
-      github.actor != 'github-actions[bot]'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.draft == false &&
+       github.actor != 'github-actions[bot]')
     steps:
+      - name: Resolve PR branch ref
+        id: pr-ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+            BRANCH=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefName -q '.headRefName')
+            echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout PR branch
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231 # v6.0.2
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ steps.pr-ref.outputs.ref }}
           fetch-depth: 0
 
       # If the PR carries a bump label (bump:patch / bump:minor / bump:major),
@@ -126,8 +161,9 @@ jobs:
             > /tmp/changelog_filtered.txt
 
           # Append PR link to every top-level bullet (lines starting with "- ")
-          PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          PR_REF="([#${{ github.event.pull_request.number }}](${PR_URL}))"
+          PR_NUM="${{ github.event.inputs.pr_number }}${{ github.event.pull_request.number }}"
+          PR_URL="https://github.com/${{ github.repository }}/pull/${PR_NUM}"
+          PR_REF="([#${PR_NUM}](${PR_URL}))"
           awk -v ref="$PR_REF" '
             /^- / { sub(/[[:space:]]*$/, ""); print $0 " " ref; next }
             { print }
@@ -160,7 +196,6 @@ jobs:
                 printing=1
                 done=1
                 print hdg
-                print ""
                 while ((getline line < "/tmp/changelog_block.txt") > 0) print line
                 print ""
                 next
@@ -179,11 +214,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
 
+          PR_REF="${{ steps.pr-ref.outputs.ref }}"
+          PR_NUM="${{ github.event.inputs.pr_number }}${{ github.event.pull_request.number }}"
           if git diff --staged --quiet; then
             echo "No CHANGELOG changes to commit."
           else
-            git commit -m "chore: update CHANGELOG for PR #${{ github.event.pull_request.number }}"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            git commit -m "chore: update CHANGELOG for PR #${PR_NUM}"
+            git push origin "HEAD:${PR_REF}"
           fi
 
       - name: PR summary
