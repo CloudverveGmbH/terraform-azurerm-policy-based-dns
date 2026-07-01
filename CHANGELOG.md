@@ -4,10 +4,11 @@ All notable changes to this module are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.0.6] - 2026-05-28
+## [Unreleased]
 
 ### Changed
-- Github release flow is now done manually. Changed actions for that ([#8](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/8))
+- `resource_manager` is removed from the Management category. ([#10](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/10))
+- A warning will be given, when resource_manager is explicitly activated as service, since it can interfere with the resource manager API, when the privatelink zone is created. ([#10](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/10))
 
 
 ## [0.0.5]
