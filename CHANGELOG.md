@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `auto-tag.yml` removed - it's functionality has been moved to the release pipeline ([#12](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/12))
 
+## [1.0.1] - 2026-07-01
+### Changed
+- No leading `vX.Y.Z` in changelog versioning, only `X.Y.Z` ([#11](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/11))
+- Codeowners adjusted ([#11](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/11))
+
 ## [1.0.0] - 2026-07-01
 ### Changed
 - Github release flow is now done manually. Changed actions for that ([#8](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/8))
