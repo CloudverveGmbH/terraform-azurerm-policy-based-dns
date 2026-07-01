@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - No leading `vX.Y.Z` in changelog versioning, only `X.Y.Z` ([#11](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/11))
+- Codeowners adjusted ([#11](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/11))
 
 
 ## [0.0.6] - 2026-05-28
