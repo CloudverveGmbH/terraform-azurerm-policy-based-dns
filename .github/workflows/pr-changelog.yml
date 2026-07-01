@@ -128,13 +128,15 @@ jobs:
         id: extract
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          # Fetch PR body — via API for workflow_dispatch, via event payload for pull_request.
+          # Fetch PR body — via API for workflow_dispatch, via env var for pull_request.
+          # (env var avoids shell injection from single-quotes / special chars in the body)
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PR_NUMBER="${{ github.event.inputs.pr_number }}"
             gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json body -q '.body' > /tmp/pr_body.txt
           else
-            printf '%s' '${{ toJSON(github.event.pull_request.body) }}' | jq -r '.' > /tmp/pr_body.txt
+            printf '%s' "$PR_BODY" > /tmp/pr_body.txt
           fi
 
           # Extract lines between <!-- KEEPACHANGELOG --> and <!-- /KEEPACHANGELOG -->
