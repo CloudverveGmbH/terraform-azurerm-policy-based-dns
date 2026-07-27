@@ -4,6 +4,12 @@ All notable changes to this module are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- Autocomplete is now possible by adding all category and service keys to the variables.tf ([#13](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/13))
+  - a test will check if the catalog and variables are in sync
+
+
 ## [1.1.0] - 2026-07-01
 ### Changed
 - `pr-changelog.yml` can be manually run, so it can be used to update the current PRs version ([#12](https://github.com/CloudverveGmbH/terraform-azurerm-policy-based-dns/pull/12))
