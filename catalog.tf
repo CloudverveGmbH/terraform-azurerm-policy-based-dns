@@ -198,8 +198,12 @@ locals {
     "${binding_key} -> ${join(", ", sort([for service_key, key in local.catalog_binding_key_by_service : service_key if key == binding_key]))}"
   ]
 
-  normalized_enabled_categories = coalesce(var.enabled_categories, {})
-  normalized_enabled_services   = coalesce(var.enabled_services, {})
+  normalized_enabled_categories = var.enabled_categories != null ? {
+    for k, v in var.enabled_categories : k => v if v != null
+  } : {}
+  normalized_enabled_services = var.enabled_services != null ? {
+    for k, v in var.enabled_services : k => v if v != null
+  } : {}
 
   unknown_enabled_categories = [
     for category, _ in local.normalized_enabled_categories : category
