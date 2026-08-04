@@ -101,10 +101,9 @@ resource "azurerm_private_dns_zone_virtual_network_link" "this" {
   provider = azurerm.connectivity
   for_each = local.vnet_link_pairs
 
-  name                  = each.key
-  resource_group_name   = var.dns_resource_group_name
-  private_dns_zone_name = each.value.zone_name
-  virtual_network_id    = each.value.vnet_id
+  name                = each.key
+  private_dns_zone_id = local.zone_ids[each.value.zone_name]
+  virtual_network_id  = each.value.vnet_id
 
   depends_on = [azurerm_private_dns_zone.managed]
 }
