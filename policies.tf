@@ -1,7 +1,8 @@
 data "azurerm_client_config" "current" {}
 
 locals {
-  policy_json_raw                = file("${path.module}/${var.policy_json_local_path}")
+  file_path                      = "${path.module}/policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json"
+  policy_json_raw                = file(local.file_path)
   alz_deploy_private_dns_generic = jsondecode(local.policy_json_raw)
   alz_policy_properties          = local.alz_deploy_private_dns_generic.properties
   alz_policy_rule_json           = replace(jsonencode(local.alz_policy_properties.policyRule), "[[", "[")
