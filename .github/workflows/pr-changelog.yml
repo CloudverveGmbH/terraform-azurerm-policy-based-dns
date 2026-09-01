@@ -14,11 +14,6 @@ on:
       - ready_for_review
     branches:
       - main
-    paths:
-      - ".github/workflows/**"
-      - "**.tf"
-      - "**.tftest.hcl"
-      - "policy_definitions/**"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -30,7 +25,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: pr-changelog-${{ github.event.pull_request.number }}
+  group: pr-changelog-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -40,8 +35,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-       github.event.pull_request.draft == false &&
-       github.actor != 'github-actions[bot]')
+       github.event.pull_request.draft == false)
     steps:
       - name: Resolve PR branch ref
         id: pr-ref
@@ -65,7 +59,7 @@ jobs:
       # If the PR carries a bump label (bump:patch / bump:minor / bump:major),
       # pre-compute the next version and use it as the CHANGELOG heading so
       # CHANGELOG.md is already versioned before the PR is merged.
-      # Without a bump label the heading stays as ## [Unreleased].
+      # The workflow fails when no bump label, or more than one bump label, is set.
       - name: Compute changelog heading from PR labels
         id: heading
         env:
@@ -73,20 +67,39 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PR_NUMBER="${{ github.event.inputs.pr_number }}"
-            LABELS_STR=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json labels -q '.labels[].name' | tr '\n' ' ')
+            LABELS=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json labels -q '.labels[].name')
           else
-            LABELS_STR=$(printf '%s' '${{ toJSON(github.event.pull_request.labels.*.name) }}' | jq -r '.[]' | tr '\n' ' ')
-          fi
-          echo "PR labels: $LABELS_STR"
-          if echo "$LABELS_STR" | grep -q 'bump:major'; then BUMP=major
-          elif echo "$LABELS_STR" | grep -q 'bump:minor'; then BUMP=minor
-          elif echo "$LABELS_STR" | grep -q 'bump:patch'; then BUMP=patch
+            LABELS=$(printf '%s' '${{ toJSON(github.event.pull_request.labels.*.name) }}' | jq -r '.[]')
           fi
 
-          if [ -z "$BUMP" ]; then
-            echo "heading=## [Unreleased]" >> "$GITHUB_ENV"
-            exit 0
+          echo "PR labels:"
+          printf '%s\n' "$LABELS"
+
+          BUMP_LABELS=$(printf '%s\n' "$LABELS" | grep -E '^bump:(major|minor|patch)$' || true)
+          BUMP_COUNT=$(printf '%s\n' "$BUMP_LABELS" | sed '/^$/d' | wc -l | tr -d ' ')
+
+          if [ "$BUMP_COUNT" -eq 0 ]; then
+            {
+              echo "### ❌ PR has no bump label"
+              echo ""
+              echo "Add exactly one of: \`bump:patch\`, \`bump:minor\`, or \`bump:major\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
+
+          if [ "$BUMP_COUNT" -gt 1 ]; then
+            {
+              echo "### ❌ PR has multiple bump labels"
+              echo ""
+              echo "Keep exactly one of: \`bump:patch\`, \`bump:minor\`, or \`bump:major\`."
+              echo ""
+              echo "Current bump labels:"
+              printf '%s\n' "$BUMP_LABELS" | sed 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          BUMP=$(printf '%s\n' "$BUMP_LABELS" | sed 's/^bump://')
 
           LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
           if [ -z "$LATEST" ]; then LATEST="v0.0.0"; fi
