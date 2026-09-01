@@ -27,3 +27,4 @@ _Empty sub-sections are removed automatically. A `([#N](…))` link is appended 
 
 - [ ] `terraform fmt` applied
 - [ ] Changelog block filled in above
+- [ ] Exactly one bump label applied: `bump:patch`, `bump:minor`, or `bump:major`
