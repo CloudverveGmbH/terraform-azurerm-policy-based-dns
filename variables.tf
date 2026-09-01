@@ -26,24 +26,6 @@ variable "policy_definition_display_name" {
   default     = "CLV - Deploy Private DNS Generic"
 }
 
-variable "policy_source_raw_url" {
-  type        = string
-  description = "Raw GitHub URL for Deploy-Private-DNS-Generic policy JSON."
-  default     = "https://raw.githubusercontent.com/Azure/Enterprise-Scale/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json"
-}
-
-variable "policy_source_repo_url" {
-  type        = string
-  description = "Repository URL used in metadata to track source import."
-  default     = "https://github.com/Azure/Enterprise-Scale/tree/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json"
-}
-
-variable "policy_json_local_path" {
-  type        = string
-  description = "Path (relative to module root) of the vendored Deploy-Private-DNS-Generic policy JSON used as authoritative source."
-  default     = "policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json"
-}
-
 variable "policy_effect" {
   type        = string
   description = "Policy effect value."

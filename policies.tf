@@ -1,7 +1,9 @@
 data "azurerm_client_config" "current" {}
 
 locals {
-  policy_json_raw                = file("${path.module}/${var.policy_json_local_path}")
+  file_path                      = "${path.module}/policy_definitions/Deploy-Private-DNS-Generic.2026-04-29.json"
+  imported_from_url              = "https://github.com/Azure/Enterprise-Scale/tree/2026-04-29/src/resources/Microsoft.Authorization/policyDefinitions/Deploy-Private-DNS-Generic.json"
+  policy_json_raw                = file(local.file_path)
   alz_deploy_private_dns_generic = jsondecode(local.policy_json_raw)
   alz_policy_properties          = local.alz_deploy_private_dns_generic.properties
   alz_policy_rule_json           = replace(jsonencode(local.alz_policy_properties.policyRule), "[[", "[")
@@ -107,9 +109,9 @@ resource "azurerm_policy_definition" "deploy_private_dns_generic" {
   metadata = jsonencode(merge(
     try(local.alz_policy_properties.metadata, {}),
     {
-      importedFrom    = var.policy_source_repo_url
+      importedFrom    = local.imported_from_url
       importedVersion = local.alz_policy_version
-      importedBy      = "terraform-http-jsondecode-module"
+      importedBy      = "terraform-module"
     }
   ))
 
